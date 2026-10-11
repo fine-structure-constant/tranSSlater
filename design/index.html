@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Translater 实现与验证</title><style>body{font:16px/1.7 system-ui,sans-serif;color:#242830;max-width:1000px;margin:40px auto;padding:0 24px}table{border-collapse:collapse;width:100%;display:block;overflow-x:auto}th,td{padding:12px;text-align:left;border-bottom:1px solid #ddd}a{color:#245bb8}code{background:#f3f4f6;padding:2px 5px}img{max-width:100%;border:1px solid #ddd}h2{margin-top:2em}</style></head><body>
+<h1>Translater 实现与验证</h1>
+<p>2026-10-11 · Windows / Tauri 2 + Rust + TypeScript · 最终状态：verified。当前目录没有 Git 元数据，保留既有项目结构。下一步：直接运行 <a href="../artifacts/Translater.exe">Translater.exe</a>。</p>
+<h2>用户需求与约束</h2>
+<table><tr><th>编号</th><th>需求与验收</th><th>状态</th></tr><tr><td>REQ-001</td><td>用户要求：修复运行失败，实现桌面翻译器。验收：编译成功，桌面窗口可打开，真实翻译可用。</td><td>requested / verified</td></tr><tr><td>REQ-002</td><td>实现推断：保留 Google 翻译、词典、缓存、代理、自动翻译、朗读与中文界面。</td><td>implemented；语音人工验证仍待进行</td></tr></table>
+<p>保留既有白色界面和橙色强调色。本次为功能修复，不更换视觉方案；支持键盘操作、可读错误、减少动态效果和最小 720 × 480 桌面窗口。浏览器只用于预览，真实翻译由 Rust 后端执行。</p>
+<h2>建议与取舍</h2>
+<p>DEC-001（proposed，技术修复依用户实现请求执行）：保留当前操作界面，修复确定性故障。相比重新设计，能保留既有交互并集中验证运行失败原因。DEC-002（implemented，实现推断）：桌面设置使用应用配置目录中的 JSON 文件，界面负责编辑；开发工具路径通过可选 tools.local.json 配置。无未决视觉方案或额外功能页面。</p>
+<h2>实现与证据</h2>
+<table><tr><th>编号</th><th>修复</th><th>源文件与证据</th><th>状态</th></tr>
+<tr><td>IMP-001</td><td>hidden 被 flex 覆盖；启动设置遮罩及空态异常。修复隐藏规则、文本对比度、焦点与减少动态效果。</td><td><a href="../src/styles.css">styles.css</a>、<a href="../index.html">index.html</a>；界面回归及桌面窗口观察</td><td>verified</td></tr>
+<tr><td>IMP-002</td><td>启动器固定工具路径、缺少错误定位。检测 Node/Rust/MSVC，提供工具文件配置、构建与测试入口。</td><td><a href="../scripts/desktop.ps1">desktop.ps1</a>、<a href="../README.md">README</a>；dev 窗口启动、release 构建与 EXE 独立启动</td><td>verified</td></tr>
+<tr><td>IMP-003</td><td>旧请求覆盖新输入、清空后仍发请求、词典标签再次打开丢内容、设置失败仍保存。</td><td><a href="../src/main.ts">main.ts</a>、<a href="../src/render.ts">render.ts</a>、<a href="../src/settings.ts">settings.ts</a>；24 项界面回归</td><td>verified</td></tr>
+<tr><td>IMP-004</td><td>SOCKS 编译支持、代理校验、空译文校验、5000 字限制、配置文件读写、缓存过期及覆盖问题。</td><td><a href="../src-tauri/src/settings.rs">settings.rs</a>、<a href="../src-tauri/src/translate/google.rs">google.rs</a>、<a href="../src-tauri/src/translate/cache.rs">cache.rs</a>；11 项单元测试及3项真实网络测试</td><td>verified；显式 SOCKS 代理仅编译/校验验证</td></tr></table>
+<h2>验证结果</h2>
+<ul><li>TypeScript 检查及 Vite 生产构建：passed。</li><li>Rust 11 项配置、缓存、协议解析测试：passed。</li><li>Google 真实网络测试：单词、整句、多段，3 项 passed；单词返回词典、释义、同义词、例句。</li><li>Playwright 24 项界面回归：passed；覆盖空态、遮罩、标签切换、注入转义、保存失败、请求竞态、错误恢复、缓存标识、互换、超长输入、清空计时器和键盘焦点。</li><li>正式优化版 EXE：passed，文件约 5.35 MB，已复制至 artifacts/Translater.exe。</li><li>关闭 Vite 后独立运行：passed，桌面 WebView 地址为 http://tauri.localhost/；可访问性树观察到真实查询返回中文译文、耗时和缓存计数。</li></ul>
+<h2>实现截图</h2>
+<p>以下为真实前端配合模拟 Tauri IPC 的实现截图，仅用于界面验证；不作为真实翻译或桌面原生窗口截图证据。截图随本机 test-results 保留。</p>
+<figure><img src="../test-results/result.png" alt="结果界面及例句转义回归测试截图"><figcaption>implementation capture · 1020 × 730 · 模拟 IPC</figcaption></figure>
+<figure><img src="../test-results/compact.png" alt="最小桌面尺寸下的界面和键盘焦点截图"><figcaption>implementation capture · 720 × 480 · 模拟 IPC</figcaption></figure>
+<h2>剩余检查与边界</h2>
+<p>无阻塞项。语音播放、复制到其他应用、逐一语言对和显式 SOCKS 代理的人工实测：manual check remaining。翻译服务依赖 Google 网络可达性，连接失败需配置已有代理。此次交付独立 EXE，安装器未生成；build.bat 可后续构建安装包。</p>
+<h2>变更记录</h2><p>2026-10-11：从现有代码定位隐藏属性、异步状态和标签片段问题；完成修复、配置持久化、工具启动器、回归测试及独立 Windows EXE 验证。</p>
+</body></html>

@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <title>Translater</title>
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+
+  <body>
+    <div class="app">
+      <!-- ── 顶部工具栏 ───────────────────────────────────── -->
+      <header class="toolbar">
+        <div class="toolbar-left">
+          <div class="select-wrap">
+            <select id="lang-pair" class="lang-pair" title="选择语言对">
+              <option value="auto|zh-CN">自动检测 → 中文</option>
+              <option value="en|zh-CN">英语 → 中文</option>
+              <option value="zh-CN|en">中文 → 英语</option>
+              <option value="en|en">英语 → 英语</option>
+              <option value="zh-CN|ja">中文 → 日语</option>
+              <option value="ja|zh-CN">日语 → 中文</option>
+              <option value="ko|zh-CN">韩语 → 中文</option>
+              <option value="zh-CN|ko">中文 → 韩语</option>
+              <option value="fr|zh-CN">法语 → 中文</option>
+              <option value="zh-CN|fr">中文 → 法语</option>
+              <option value="de|zh-CN">德语 → 中文</option>
+              <option value="zh-CN|de">中文 → 德语</option>
+              <option value="ru|zh-CN">俄语 → 中文</option>
+              <option value="zh-CN|ru">中文 → 俄语</option>
+              <option value="es|zh-CN">西班牙语 → 中文</option>
+              <option value="zh-CN|es">中文 → 西班牙语</option>
+            </select>
+            <span class="caret">▾</span>
+          </div>
+          <button id="btn-swap" class="icon-btn" title="互换语言">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 8h13l-3.2-3.2" />
+              <path d="M20 16H7l3.2 3.2" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="toolbar-right">
+          <span id="status" class="status" role="status" aria-live="polite"></span>
+          <button id="btn-clear-cache" class="ghost-btn" title="清空内存缓存">
+            缓存 <span id="cache-size">0</span>
+          </button>
+          <button id="btn-settings" class="icon-btn" title="设置">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.1 14.6a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1v.3a2 2 0 1 1-4 0v-.2a1.6 1.6 0 0 0-2.8-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7h-.3a2 2 0 1 1 0-4h.2a1.6 1.6 0 0 0 1.1-2.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3h.1a1.6 1.6 0 0 0 1-1.5v-.3a2 2 0 1 1 4 0v.2a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8v.1a1.6 1.6 0 0 0 1.5 1h.3a2 2 0 1 1 0 4h-.2a1.6 1.6 0 0 0-1.4 1z" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- ── 主体 ─────────────────────────────────────────── -->
+      <main class="content" id="content">
+        <!-- 查询词条区（同时是输入框） -->
+        <section class="query-card">
+          <textarea
+            id="input"
+            aria-label="要翻译的原文"
+            dir="auto"
+            class="query-input"
+            rows="1"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="输入或粘贴要翻译的内容…"
+          ></textarea>
+
+          <div class="query-foot">
+            <div class="query-meta" id="query-meta"></div>
+            <div class="query-actions">
+              <button data-act="speak" class="icon-btn sm" title="朗读原文">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M11 5 6.5 8.8H3v6.4h3.5L11 19V5z" />
+                  <path d="M15.2 9.2a4 4 0 0 1 0 5.6" />
+                  <path d="M18 6.4a8 8 0 0 1 0 11.2" />
+                </svg>
+              </button>
+              <button data-act="copy" class="icon-btn sm" title="复制译文">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="9" width="12" height="12" rx="2.2" />
+                  <path d="M5.5 15H5a1.5 1.5 0 0 1-1.5-1.5V5A1.5 1.5 0 0 1 5 3.5h8.5A1.5 1.5 0 0 1 15 5v.5" />
+                </svg>
+              </button>
+              <button data-act="clear" class="icon-btn sm" title="清空">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+              <button data-act="go" class="icon-btn sm" title="翻译 (Ctrl+Enter)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="11" cy="11" r="6.8" />
+                  <path d="m20.2 20.2-4-4" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 错误条 -->
+        <div class="alert" id="alert" role="alert" hidden></div>
+
+        <!-- 结果区 -->
+        <section class="result" id="result" hidden></section>
+
+        <!-- 空态 -->
+        <section class="empty" id="empty">
+          <div class="empty-title">Translater</div>
+          <div class="empty-sub">
+            输入单词或整句开始翻译。结果来自 Google 翻译接口，本地缓存 24 小时。
+          </div>
+          <div class="empty-keys">
+            <kbd>Ctrl</kbd> + <kbd>Enter</kbd> 立即翻译 · <kbd>Esc</kbd> 清空
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- ── 设置面板 ───────────────────────────────────────── -->
+    <div class="mask" id="mask" hidden>
+      <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <div class="dialog-head">
+          <h2 id="settings-title">设置</h2>
+          <button id="btn-close-settings" class="icon-btn" title="关闭">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="field">
+          <label for="proxy">代理地址</label>
+          <input
+            id="proxy"
+            type="text"
+            placeholder="http://127.0.0.1:7890  或  socks5://127.0.0.1:1080"
+          />
+          <p class="hint">
+            支持 HTTP / SOCKS5。留空使用系统代理或环境代理；连接失败时请填写可用代理。
+          </p>
+        </div>
+
+        <div class="field">
+          <label class="row-label">
+            <input id="auto-translate" type="checkbox" checked />
+            <span>输入停顿后自动翻译</span>
+          </label>
+        </div>
+
+        <div class="field">
+          <label class="row-label">
+            <input id="auto-speak" type="checkbox" />
+            <span>单词翻译完成后自动朗读</span>
+          </label>
+        </div>
+
+        <div class="dialog-foot">
+          <span class="hint" id="settings-msg"></span>
+          <button id="btn-save-settings" class="primary">保存</button>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

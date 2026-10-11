@@ -1,0 +1,6 @@
+{
+  "nodeDir": "D:\\.ENV\\nodejs",
+  "rustDir": "D:\\.ENV\\Rust\\bin",
+  "msvcSetup": "D:\\.ENV\\MSVC\\setup_x64.bat",
+  "cargoTargetDir": "D:\\.ENV\\cargo-target\\translater-msvc"
+}
