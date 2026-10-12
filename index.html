@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="/src/styles.css" />
+    <link rel="stylesheet" href="/src/panels.css" />
     <title>Translater</title>
     <script type="module" src="/src/main.ts" defer></script>
   </head>
@@ -40,12 +41,21 @@
               <path d="M20 16H7l3.2 3.2" />
             </svg>
           </button>
+
+          <div class="select-wrap">
+            <select id="engine" class="engine-pick" title="选择翻译引擎"></select>
+            <span class="caret">▾</span>
+          </div>
+          <span id="engine-note" class="engine-note"></span>
         </div>
 
         <div class="toolbar-right">
           <span id="status" class="status" role="status" aria-live="polite"></span>
           <button id="btn-clear-cache" class="ghost-btn" title="清空内存缓存">
             缓存 <span id="cache-size">0</span>
+          </button>
+          <button id="btn-history" class="ghost-btn" title="翻译历史 (Ctrl+H)">
+            历史 <span id="history-count">0</span>
           </button>
           <button id="btn-settings" class="icon-btn" title="设置">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
@@ -112,14 +122,48 @@
         <section class="empty" id="empty">
           <div class="empty-title">Translater</div>
           <div class="empty-sub">
-            输入单词或整句开始翻译。结果来自 Google 翻译接口，本地缓存 24 小时。
+            输入单词或整句开始翻译。Google 需代理；有道两个引擎国内直连。翻译记录自动入库，无条数上限。
           </div>
           <div class="empty-keys">
-            <kbd>Ctrl</kbd> + <kbd>Enter</kbd> 立即翻译 · <kbd>Esc</kbd> 清空
+            <kbd>Ctrl</kbd> + <kbd>Enter</kbd> 立即翻译 · <kbd>Esc</kbd> 清空 ·
+            <kbd>Ctrl</kbd> + <kbd>H</kbd> 历史
           </div>
         </section>
       </main>
     </div>
+
+    <!-- ── 历史抽屉 ───────────────────────────────────────── -->
+    <aside class="drawer" id="drawer" hidden aria-labelledby="history-title">
+      <div class="drawer-head">
+        <h2 id="history-title">翻译历史</h2>
+        <span class="drawer-stat" id="history-stat"></span>
+        <button id="btn-close-history" class="icon-btn" title="关闭">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="drawer-tools">
+        <input id="history-search" type="search" placeholder="搜索原文或译文…" autocomplete="off" />
+        <select id="export-format" title="导出格式">
+          <option value="csv">CSV 表格</option>
+          <option value="markdown">Markdown</option>
+          <option value="anki">Anki 导入</option>
+          <option value="json">JSON 备份</option>
+        </select>
+        <button id="btn-export" class="primary sm">导出</button>
+        <button id="btn-clear-history" class="ghost-btn danger" title="清空全部历史">清空</button>
+      </div>
+      <p class="drawer-hint" id="export-hint"></p>
+
+      <div class="drawer-list" id="history-list"></div>
+      <div class="drawer-foot">
+        <span class="hint" id="history-msg"></span>
+        <button id="btn-history-more" class="ghost-btn" hidden>加载更多</button>
+      </div>
+    </aside>
+    <div class="drawer-mask" id="drawer-mask" hidden></div>
 
     <!-- ── 设置面板 ───────────────────────────────────────── -->
     <div class="mask" id="mask" hidden>
@@ -134,6 +178,12 @@
         </div>
 
         <div class="field">
+          <label for="settings-engine">翻译引擎</label>
+          <select id="settings-engine"></select>
+          <p class="hint" id="settings-engine-note"></p>
+        </div>
+
+        <div class="field">
           <label for="proxy">代理地址</label>
           <input
             id="proxy"
@@ -141,7 +191,8 @@
             placeholder="http://127.0.0.1:7890  或  socks5://127.0.0.1:1080"
           />
           <p class="hint">
-            支持 HTTP / SOCKS5。留空使用系统代理或环境代理；连接失败时请填写可用代理。
+            仅 Google 引擎需要代理。有道的两个引擎强制直连，不受此处影响。
+            留空使用系统代理或环境代理。
           </p>
         </div>
 
@@ -157,6 +208,14 @@
             <input id="auto-speak" type="checkbox" />
             <span>单词翻译完成后自动朗读</span>
           </label>
+        </div>
+
+        <div class="field">
+          <label class="row-label">
+            <input id="record-history" type="checkbox" checked />
+            <span>记录翻译历史（不设条数上限）</span>
+          </label>
+          <p class="hint">关闭后不再写入新记录，已有历史不受影响。</p>
         </div>
 
         <div class="dialog-foot">

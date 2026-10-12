@@ -4,6 +4,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum TranslateError {
+    // 说明：`reqwest::Error` / `url::ParseError` 用 `#[from]` 自动转换，
+    // 其余变体带上游返回的文本，方便直接在界面上显示。
     #[error("网络请求失败：{0}")]
     Http(#[from] reqwest::Error),
 
@@ -27,6 +29,12 @@ pub enum TranslateError {
 
     #[error("无法读写设置文件：{0}")]
     Settings(String),
+
+    #[error("历史库操作失败：{0}")]
+    History(String),
+
+    #[error("导出失败：{0}")]
+    Export(String),
 }
 
 impl serde::Serialize for TranslateError {

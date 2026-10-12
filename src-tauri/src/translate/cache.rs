@@ -11,20 +11,25 @@ use std::time::{Duration, Instant};
 
 use super::model::TranslateResult;
 
-/// 缓存键：原文 + 源语言 + 目标语言。
+/// 缓存键：原文 + 源语言 + 目标语言 + 引擎。
+///
+/// 带上引擎是必须的：同一个词在 Google 和有道下的结果不同，
+/// 不加就会串味。
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CacheKey {
     pub text: String,
     pub from: String,
     pub to: String,
+    pub engine: String,
 }
 
 impl CacheKey {
-    pub fn new(text: &str, from: &str, to: &str) -> Self {
+    pub fn new(text: &str, from: &str, to: &str, engine: &str) -> Self {
         Self {
             text: text.to_string(),
             from: from.to_string(),
             to: to.to_string(),
+            engine: engine.to_string(),
         }
     }
 }
@@ -132,12 +137,16 @@ mod tests {
         .unwrap()
     }
 
+    fn key(text: &str) -> CacheKey {
+        CacheKey::new(text, "en", "zh-CN", "google")
+    }
+
     #[test]
     fn cache_hits_overwrite_and_eviction() {
         let mut c = TranslateCache::new(60, 2);
-        let a = CacheKey::new("a", "en", "zh-CN");
-        let b = CacheKey::new("b", "en", "zh-CN");
-        let d = CacheKey::new("d", "en", "zh-CN");
+        let a = key("a");
+        let b = key("b");
+        let d = key("d");
         c.put(a.clone(), entry("A"));
         c.put(b.clone(), entry("B"));
         c.put(b.clone(), entry("B2"));
@@ -156,13 +165,27 @@ mod tests {
     }
 
     #[test]
+    fn different_engines_do_not_share_entries() {
+        let mut c = TranslateCache::new(60, 10);
+        c.put(
+            CacheKey::new("a", "en", "zh-CN", "google"),
+            entry("google 结果"),
+        );
+        assert!(
+            c.get(&CacheKey::new("a", "en", "zh-CN", "youdao")).is_none(),
+            "换引擎必须重新请求，不能拿到别的引擎的缓存"
+        );
+        assert!(c.get(&CacheKey::new("a", "en", "zh-CN", "google")).is_some());
+    }
+
+    #[test]
     fn expired_entries_are_excluded_from_stats() {
         let mut c = TranslateCache::new(60, 2);
-        let key = CacheKey::new("a", "en", "zh-CN");
-        c.put(key.clone(), entry("A"));
-        c.map.get_mut(&key).unwrap().inserted = Instant::now() - Duration::from_secs(61);
+        let k = key("a");
+        c.put(k.clone(), entry("A"));
+        c.map.get_mut(&k).unwrap().inserted = Instant::now() - Duration::from_secs(61);
         assert_eq!(c.len(), 0);
-        assert!(c.get(&key).is_none());
+        assert!(c.get(&k).is_none());
     }
 }
 

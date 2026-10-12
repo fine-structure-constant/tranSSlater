@@ -1,25 +1,29 @@
-//! Google 翻译接口客户端。
+//! Google 翻译驱动。
 //!
 //! 端点：`https://translate.googleapis.com/translate_a/single`
 //!
 //! 实测（2026-10）确认：
 //! - `client=gtx` 可用；`client=webapp` 返回 403
 //! - 短时间连续请求会返回 429，需要退避重试
-//! - 响应是一个异构数组，各下标含义见 [`Index`]
+//! - **大陆网络下必须走代理**，因此这是唯一接受代理配置的引擎
+//! - 响应是一个异构数组，各下标含义见 [`index`]
 //!
 //! 我们固定请求 `dt=t,bd,rm,md,ss,ex,at,ld`，因此下标是稳定的。
 
 use std::time::{Duration, Instant};
 
+use async_trait::async_trait;
 use serde_json::Value;
 use url::Url;
 
+use super::driver::{Driver, EngineInfo};
 use super::error::TranslateError;
 use super::model::*;
 
+pub const ID: &str = "google";
 const ENDPOINT: &str = "https://translate.googleapis.com/translate_a/single";
 
-/// 固定请求的 dt 参数。改动这里必须同步复核 [`Index`]。
+/// 固定请求的 dt 参数。改动这里必须同步复核 [`index`]。
 const DT_PARAMS: [&str; 8] = ["t", "bd", "rm", "md", "ss", "ex", "at", "ld"];
 
 /// 响应数组的下标含义（与 [`DT_PARAMS`] 绑定）。
@@ -263,15 +267,22 @@ pub fn parse(
         query: query.to_string(),
         source_lang,
         target_lang: target_lang.to_string(),
+        engine: ID.to_string(),
         translation,
         segments,
         romanization,
         phonetic,
+        phonetic_uk: None,
+        speak_url: None,
+        target_speak_url: None,
         dictionary,
         alternatives,
         synonyms,
         definitions,
         examples,
+        phrases: Vec::new(),
+        related: Vec::new(),
+        sections: Vec::new(),
         is_word,
         cached: false,
         elapsed_ms: 0,
@@ -311,7 +322,12 @@ fn parse_dictionary(raw: &Value) -> Vec<DictEntry> {
             });
         }
 
-        out.push(DictEntry { pos, terms, back });
+        out.push(DictEntry {
+            pos,
+            terms,
+            back,
+            exams: Vec::new(),
+        });
     }
     out
 }
@@ -347,7 +363,11 @@ fn parse_synonyms(raw: &Value) -> Vec<SynonymGroup> {
             }
         }
         if !words.is_empty() {
-            out.push(SynonymGroup { pos, words });
+            out.push(SynonymGroup {
+                pos,
+                words,
+                gloss: None,
+            });
         }
     }
     out
@@ -367,31 +387,79 @@ fn parse_definitions(raw: &Value) -> Vec<DefinitionGroup> {
             defs.push(Definition {
                 text,
                 example: str_at(&d, 2),
+                similar: Vec::new(),
             });
         }
         if !defs.is_empty() {
             out.push(DefinitionGroup {
                 pos,
                 definitions: defs,
+                source: None,
             });
         }
     }
     out
 }
 
-/// `[13]`：`[[[例句, ...], ...], ...]`
-fn parse_examples(raw: &Value) -> Vec<String> {
+/// `[13]`：`[[[例句, ...], ...], ...]`。Google 只给英文例句，没有译文。
+fn parse_examples(raw: &Value) -> Vec<Example> {
     let mut out = Vec::new();
     for block in arr_at(raw, index::EXAMPLES) {
         for item in block.as_array().cloned().unwrap_or_default() {
             if let Some(s) = str_at(&item, 0) {
-                if !out.contains(&s) {
-                    out.push(s);
+                if !out.iter().any(|e: &Example| e.text == s) {
+                    out.push(Example {
+                        text: s,
+                        translation: None,
+                        source: None,
+                    });
                 }
             }
         }
     }
     out
+}
+
+// ---------------------------------------------------------------------------
+// 驱动
+// ---------------------------------------------------------------------------
+
+pub struct GoogleDriver {
+    client: GoogleClient,
+}
+
+impl GoogleDriver {
+    pub const ID: &'static str = ID;
+
+    pub fn new(proxy: Option<&str>) -> Result<Self, TranslateError> {
+        Ok(Self {
+            client: GoogleClient::new(proxy)?,
+        })
+    }
+}
+
+#[async_trait]
+impl Driver for GoogleDriver {
+    fn info(&self) -> EngineInfo {
+        EngineInfo {
+            id: ID.into(),
+            name: "Google 翻译".into(),
+            note: "大陆需代理；词典、英英释义、同义词、例句最均衡".into(),
+            needs_proxy: true,
+            supports_sentence: true,
+            supports_dictionary: true,
+            supports_audio: false,
+        }
+    }
+
+    async fn translate(
+        &self,
+        text: &str,
+        from: &str,
+        to: &str,
+    ) -> Result<TranslateResult, TranslateError> {
+        self.client.translate(text, from, to).await
+    }
 }
 
 #[cfg(test)]
@@ -499,6 +567,7 @@ mod tests {
     fn parses_word_fields() {
         let r = parse(&word_response(), "coercion", "zh-CN").unwrap();
         assert_eq!(r.translation, "强迫");
+        assert_eq!(r.engine, "google");
         assert_eq!(r.source_lang, "en");
         assert_eq!(r.romanization.as_deref(), Some("Qiǎngpò"));
         assert_eq!(r.phonetic.as_deref(), Some("kōˈərSH(ə)n"));
@@ -539,7 +608,8 @@ mod tests {
                 .contains("coercion")
         );
         assert_eq!(r.examples.len(), 1);
-        assert!(r.examples[0].contains("<b>coercion</b>"));
+        assert!(r.examples[0].text.contains("<b>coercion</b>"));
+        assert!(r.examples[0].translation.is_none());
         assert!(r.is_word);
     }
 
@@ -552,6 +622,9 @@ mod tests {
         assert!(r.synonyms.is_empty());
         assert!(r.definitions.is_empty());
         assert!(r.examples.is_empty());
+        assert!(r.phrases.is_empty());
+        assert!(r.related.is_empty());
+        assert!(r.sections.is_empty());
         assert!(!r.is_word);
         assert!(r.phonetic.is_none());
     }

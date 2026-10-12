@@ -20,6 +20,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
@@ -28,6 +29,15 @@ reqwest = { version = "0.12", features = ["json", "socks"] }
 url = "2"
 tokio = { version = "1", features = ["time"] }
 thiserror = "2"
+
+# 驱动抽象
+async-trait = "0.1"
+
+# 历史库：bundled 自带 SQLite 源码，不依赖系统库
+rusqlite = { version = "0.40", features = ["bundled"] }
+
+# 导出时格式化本地时间
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
