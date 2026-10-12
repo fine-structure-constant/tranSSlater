@@ -11,14 +11,14 @@
   border-radius: 8px;
   background: var(--bg);
   padding: 5px 26px 5px 10px;
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
   color: var(--text);
   cursor: pointer;
   outline: none;
 }
 
 .engine-pick:hover {
-  border-color: #c9ced6;
+  border-color: var(--border-hover);
 }
 
 .engine-pick:focus {
@@ -30,7 +30,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--text-3);
 }
 
@@ -70,12 +70,12 @@
   background: var(--bg-hover);
   padding: 0 5px;
   font-family: var(--font-en);
-  font-size: 11px;
+  font-size: calc(11px * var(--fs));
   color: var(--text-3);
 }
 
 .gloss {
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--fs));
   color: var(--text-3);
 }
 
@@ -105,7 +105,7 @@
   padding: 0;
   text-align: left;
   font-family: var(--font-en);
-  font-size: 14.5px;
+  font-size: calc(14.5px * var(--fs));
   color: var(--link);
 }
 
@@ -114,7 +114,7 @@
 }
 
 .phrase-tran {
-  font-size: 14px;
+  font-size: calc(14px * var(--fs));
   color: var(--text-2);
 }
 
@@ -137,7 +137,7 @@
 
 .rel-gloss {
   font-family: var(--font);
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--text-3);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -161,7 +161,7 @@
 
 .ex-text {
   font-family: var(--font-en);
-  font-size: 15.5px;
+  font-size: calc(15.5px * var(--fs));
   line-height: 1.7;
   color: var(--text);
 }
@@ -173,14 +173,14 @@
 
 .ex-tran {
   margin-top: 2px;
-  font-size: 14px;
+  font-size: calc(14px * var(--fs));
   line-height: 1.65;
   color: var(--text-2);
 }
 
 .ex-source {
   margin-top: 2px;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--text-3);
 }
 
@@ -188,7 +188,7 @@
 
 .section-note {
   margin: 0 0 16px;
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--fs));
   line-height: 1.6;
   color: var(--text-3);
 }
@@ -204,7 +204,7 @@
 .sec-group > .pos {
   font-family: var(--font-en);
   font-style: italic;
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
   color: var(--text-3);
   margin-bottom: 8px;
 }
@@ -219,21 +219,21 @@
 
 .sec-text {
   font-family: var(--font-en);
-  font-size: 15px;
+  font-size: calc(15px * var(--fs));
   line-height: 1.7;
   color: var(--text);
 }
 
 .sec-tran {
   margin-top: 2px;
-  font-size: 14px;
+  font-size: calc(14px * var(--fs));
   line-height: 1.65;
   color: var(--text-2);
 }
 
 .sec-note {
   margin-top: 3px;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--text-3);
 }
 
@@ -241,7 +241,7 @@
 .pre {
   white-space: pre-wrap;
   word-break: break-word;
-  font-size: 14px;
+  font-size: calc(14px * var(--fs));
   line-height: 1.75;
   color: var(--text-2);
 }
@@ -249,7 +249,7 @@
 /* AI 释义的迷你 Markdown 输出 */
 .md h4 {
   margin: 14px 0 6px;
-  font-size: 14px;
+  font-size: calc(14px * var(--fs));
   font-weight: 600;
   color: var(--text);
 }
@@ -260,7 +260,7 @@
 
 .md p {
   margin: 0 0 8px;
-  font-size: 14.5px;
+  font-size: calc(14.5px * var(--fs));
   line-height: 1.75;
   color: var(--text-2);
 }
@@ -272,7 +272,7 @@
 
 .md li {
   margin-bottom: 3px;
-  font-size: 14.5px;
+  font-size: calc(14.5px * var(--fs));
   line-height: 1.7;
   color: var(--text-2);
 }
@@ -287,7 +287,7 @@
   background: var(--bg-soft);
   padding: 1px 5px;
   font-family: var(--font-en);
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
 }
 
 /* ── 历史抽屉 ──────────────────────────────────────────────── */
@@ -296,7 +296,7 @@
   position: fixed;
   inset: 0;
   z-index: 40;
-  background: rgba(24, 27, 31, 0.25);
+  background: var(--overlay-soft);
 }
 
 .drawer {
@@ -310,7 +310,7 @@
   width: min(460px, 100vw);
   background: var(--bg);
   border-left: 1px solid var(--border);
-  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.1);
+  box-shadow: -12px 0 40px var(--shadow-color-soft);
   animation: drawer-in 0.18s ease-out;
 }
 
@@ -329,13 +329,13 @@
 
 .drawer-head h2 {
   margin: 0;
-  font-size: 15px;
+  font-size: calc(15px * var(--fs));
   font-weight: 600;
 }
 
 .drawer-stat {
   flex: 1;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--text-3);
 }
 
@@ -351,7 +351,7 @@
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   padding: 6px 10px;
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
   outline: none;
 }
 
@@ -365,7 +365,7 @@
   border-radius: 8px;
   background: var(--bg);
   padding: 6px 10px;
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
   cursor: pointer;
   outline: none;
 }
@@ -373,21 +373,21 @@
 .primary.sm,
 .ghost-btn.sm {
   padding: 6px 12px;
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
 }
 
 .ghost-btn.danger {
-  color: #c0392b;
+  color: var(--danger);
 }
 
 .ghost-btn.danger:hover {
-  background: #fdeceb;
+  background: var(--danger-soft);
 }
 
 .drawer-hint {
   margin: 0;
   padding: 0 16px 8px;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--text-3);
 }
 
@@ -421,7 +421,7 @@
 
 .history-item .hi-query {
   font-family: var(--font-en);
-  font-size: 14.5px;
+  font-size: calc(14.5px * var(--fs));
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -430,7 +430,7 @@
 
 .history-item .hi-trans {
   grid-column: 1;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--fs));
   color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -441,7 +441,7 @@
   grid-column: 1;
   display: flex;
   gap: 8px;
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--fs));
   color: var(--text-3);
 }
 
@@ -465,19 +465,19 @@
   width: 26px;
   height: 26px;
   color: var(--text-3);
-  font-size: 15px;
+  font-size: calc(15px * var(--fs));
   line-height: 1;
 }
 
 .hi-del:hover {
-  background: #fdeceb;
-  color: #c0392b;
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
 .history-empty {
   padding: 40px 16px;
   text-align: center;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--fs));
   color: var(--text-3);
 }
 

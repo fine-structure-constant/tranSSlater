@@ -1,8 +1,9 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="plain" data-font="md">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="/src/theme.css" />
     <link rel="stylesheet" href="/src/styles.css" />
     <link rel="stylesheet" href="/src/panels.css" />
     <title>Translater</title>
@@ -11,45 +12,137 @@
 
   <body>
     <div class="app">
-      <!-- ── 顶部工具栏 ───────────────────────────────────── -->
-      <header class="toolbar">
-        <div class="toolbar-left">
-          <div class="select-wrap">
-            <select id="lang-pair" class="lang-pair" title="选择语言对">
-              <option value="auto|zh-CN">自动检测 → 中文</option>
-              <option value="en|zh-CN">英语 → 中文</option>
-              <option value="zh-CN|en">中文 → 英语</option>
-              <option value="en|en">英语 → 英语</option>
-              <option value="zh-CN|ja">中文 → 日语</option>
-              <option value="ja|zh-CN">日语 → 中文</option>
-              <option value="ko|zh-CN">韩语 → 中文</option>
-              <option value="zh-CN|ko">中文 → 韩语</option>
-              <option value="fr|zh-CN">法语 → 中文</option>
-              <option value="zh-CN|fr">中文 → 法语</option>
-              <option value="de|zh-CN">德语 → 中文</option>
-              <option value="zh-CN|de">中文 → 德语</option>
-              <option value="ru|zh-CN">俄语 → 中文</option>
-              <option value="zh-CN|ru">中文 → 俄语</option>
-              <option value="es|zh-CN">西班牙语 → 中文</option>
-              <option value="zh-CN|es">中文 → 西班牙语</option>
-            </select>
-            <span class="caret">▾</span>
-          </div>
-          <button id="btn-swap" class="icon-btn" title="互换语言">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M4 8h13l-3.2-3.2" />
-              <path d="M20 16H7l3.2 3.2" />
-            </svg>
-          </button>
+      <!-- 皮肤装饰件：只在 meridian 下显示 -->
+      <div class="spectrum" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <div class="frame-screws" aria-hidden="true">
+        <span class="tl"></span><span class="tr"></span>
+        <span class="bl"></span><span class="br"></span>
+      </div>
 
-          <div class="select-wrap">
-            <select id="engine" class="engine-pick" title="选择翻译引擎"></select>
-            <span class="caret">▾</span>
-          </div>
-          <span id="engine-note" class="engine-note"></span>
+      <!-- ── 菜单栏 ───────────────────────────────────────── -->
+      <header class="chrome">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+          <span class="brand-name">Translater</span>
         </div>
 
-        <div class="toolbar-right">
+        <nav class="menubar" id="menubar" role="menubar" aria-label="主菜单">
+          <div class="menu">
+            <button class="menu-btn" type="button" role="menuitem" aria-haspopup="true" aria-expanded="false">
+              文件
+            </button>
+            <div class="menu-pop" role="menu" hidden>
+              <button class="menu-item" type="button" role="menuitem" data-cmd="export" data-arg="csv">
+                导出历史为 CSV 表格…
+              </button>
+              <button class="menu-item" type="button" role="menuitem" data-cmd="export" data-arg="markdown">
+                导出历史为 Markdown…
+              </button>
+              <button class="menu-item" type="button" role="menuitem" data-cmd="export" data-arg="anki">
+                导出历史为 Anki 导入文件…
+              </button>
+              <button class="menu-item" type="button" role="menuitem" data-cmd="export" data-arg="json">
+                导出历史为 JSON 备份…
+              </button>
+              <div class="menu-sep" role="separator"></div>
+              <button class="menu-item" type="button" role="menuitem" data-cmd="open-history">
+                打开翻译历史<span class="menu-key">Ctrl+H</span>
+              </button>
+              <button class="menu-item danger" type="button" role="menuitem" data-cmd="clear-history">
+                清空翻译历史…
+              </button>
+              <div class="menu-sep" role="separator"></div>
+              <button class="menu-item" type="button" role="menuitem" data-cmd="settings">
+                设置…
+              </button>
+              <button class="menu-item" type="button" role="menuitem" data-cmd="quit">退出</button>
+            </div>
+          </div>
+
+          <div class="menu">
+            <button class="menu-btn" type="button" role="menuitem" aria-haspopup="true" aria-expanded="false">
+              编辑
+            </button>
+            <div class="menu-pop" role="menu" hidden>
+              <button class="menu-item" type="button" role="menuitem" data-cmd="translate">
+                翻译<span class="menu-key">Ctrl+Enter</span>
+              </button>
+              <button class="menu-item" type="button" role="menuitem" data-cmd="copy">复制译文</button>
+              <button class="menu-item" type="button" role="menuitem" data-cmd="speak">朗读原文</button>
+              <button class="menu-item" type="button" role="menuitem" data-cmd="swap">互换语言方向</button>
+              <div class="menu-sep" role="separator"></div>
+              <button class="menu-item" type="button" role="menuitem" data-cmd="clear-input">
+                清空输入<span class="menu-key">Esc</span>
+              </button>
+              <div class="menu-sep" role="separator"></div>
+              <button class="menu-item" type="button" role="menuitem" data-cmd="clear-cache">
+                清空翻译缓存
+              </button>
+            </div>
+          </div>
+
+          <div class="menu">
+            <button class="menu-btn" type="button" role="menuitem" aria-haspopup="true" aria-expanded="false">
+              视图
+            </button>
+            <div class="menu-pop wide" role="menu" hidden>
+              <div class="menu-label">皮肤</div>
+              <button class="menu-item radio" type="button" role="menuitemradio" data-cmd="theme" data-arg="plain">
+                简约 plain
+              </button>
+              <button class="menu-item radio" type="button" role="menuitemradio" data-cmd="theme" data-arg="meridian">
+                远点 meridian
+              </button>
+              <div class="menu-sep" role="separator"></div>
+              <div class="menu-label">字号</div>
+              <button class="menu-item radio" type="button" role="menuitemradio" data-cmd="font" data-arg="sm">小</button>
+              <button class="menu-item radio" type="button" role="menuitemradio" data-cmd="font" data-arg="md">标准</button>
+              <button class="menu-item radio" type="button" role="menuitemradio" data-cmd="font" data-arg="lg">大</button>
+              <button class="menu-item radio" type="button" role="menuitemradio" data-cmd="font" data-arg="xl">特大</button>
+              <div class="menu-sep" role="separator"></div>
+              <div class="menu-label">窗口大小</div>
+              <button class="menu-item radio" type="button" role="menuitemradio" data-cmd="window" data-arg="900x620">
+                紧凑 900 × 620
+              </button>
+              <button class="menu-item radio" type="button" role="menuitemradio" data-cmd="window" data-arg="1020x760">
+                标准 1020 × 760
+              </button>
+              <button class="menu-item radio" type="button" role="menuitemradio" data-cmd="window" data-arg="1280x820">
+                宽屏 1280 × 820
+              </button>
+              <button class="menu-item radio" type="button" role="menuitemradio" data-cmd="window" data-arg="1440x900">
+                大屏 1440 × 900
+              </button>
+              <div class="menu-sep" role="separator"></div>
+              <button class="menu-item check" type="button" role="menuitemcheckbox" data-cmd="remember-window">
+                记住窗口大小
+              </button>
+            </div>
+          </div>
+
+          <div class="menu">
+            <button class="menu-btn" type="button" role="menuitem" aria-haspopup="true" aria-expanded="false">
+              说明
+            </button>
+            <div class="menu-pop wide" role="menu" hidden>
+              <button class="menu-item" type="button" role="menuitem" data-cmd="help">
+                使用说明…<span class="menu-key">F1</span>
+              </button>
+              <button class="menu-item" type="button" role="menuitem" data-cmd="help" data-arg="engines">
+                引擎与数据来源…
+              </button>
+              <button class="menu-item" type="button" role="menuitem" data-cmd="help" data-arg="keys">
+                快捷键…
+              </button>
+              <div class="menu-sep" role="separator"></div>
+              <button class="menu-item" type="button" role="menuitem" data-cmd="help" data-arg="about">
+                关于 Translater…
+              </button>
+            </div>
+          </div>
+        </nav>
+
+        <div class="chrome-right">
           <span id="status" class="status" role="status" aria-live="polite"></span>
           <button id="btn-clear-cache" class="ghost-btn" title="清空内存缓存">
             缓存 <span id="cache-size">0</span>
@@ -66,9 +159,45 @@
         </div>
       </header>
 
+      <!-- ── 语言与引擎 ───────────────────────────────────── -->
+      <div class="toolbar">
+        <div class="select-wrap">
+          <select id="lang-pair" class="lang-pair" title="选择语言对">
+            <option value="auto|zh-CN">自动检测 → 中文</option>
+            <option value="en|zh-CN">英语 → 中文</option>
+            <option value="zh-CN|en">中文 → 英语</option>
+            <option value="en|en">英语 → 英语</option>
+            <option value="zh-CN|ja">中文 → 日语</option>
+            <option value="ja|zh-CN">日语 → 中文</option>
+            <option value="ko|zh-CN">韩语 → 中文</option>
+            <option value="zh-CN|ko">中文 → 韩语</option>
+            <option value="fr|zh-CN">法语 → 中文</option>
+            <option value="zh-CN|fr">中文 → 法语</option>
+            <option value="de|zh-CN">德语 → 中文</option>
+            <option value="zh-CN|de">中文 → 德语</option>
+            <option value="ru|zh-CN">俄语 → 中文</option>
+            <option value="zh-CN|ru">中文 → 俄语</option>
+            <option value="es|zh-CN">西班牙语 → 中文</option>
+            <option value="zh-CN|es">中文 → 西班牙语</option>
+          </select>
+          <span class="caret">▾</span>
+        </div>
+
+        <button id="btn-swap" class="icon-btn" title="互换语言">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 8h13l-3.2-3.2" />
+            <path d="M20 16H7l3.2 3.2" />
+          </svg>
+        </button>
+
+        <div class="select-wrap">
+          <select id="engine" class="engine-pick" title="选择翻译引擎"></select>
+          <span class="caret">▾</span>
+        </div>
+      </div>
+
       <!-- ── 主体 ─────────────────────────────────────────── -->
       <main class="content" id="content">
-        <!-- 查询词条区（同时是输入框） -->
         <section class="query-card">
           <textarea
             id="input"
@@ -112,21 +241,15 @@
           </div>
         </section>
 
-        <!-- 错误条 -->
         <div class="alert" id="alert" role="alert" hidden></div>
 
-        <!-- 结果区 -->
         <section class="result" id="result" hidden></section>
 
-        <!-- 空态 -->
         <section class="empty" id="empty">
           <div class="empty-title">Translater</div>
-          <div class="empty-sub">
-            输入单词或整句开始翻译。Google 需代理；有道两个引擎国内直连。翻译记录自动入库，无条数上限。
-          </div>
           <div class="empty-keys">
-            <kbd>Ctrl</kbd> + <kbd>Enter</kbd> 立即翻译 · <kbd>Esc</kbd> 清空 ·
-            <kbd>Ctrl</kbd> + <kbd>H</kbd> 历史
+            <kbd>Ctrl</kbd> + <kbd>Enter</kbd> 翻译 · <kbd>Esc</kbd> 清空 ·
+            <kbd>Ctrl</kbd> + <kbd>H</kbd> 历史 · <kbd>F1</kbd> 说明
           </div>
         </section>
       </main>
@@ -165,7 +288,7 @@
     </aside>
     <div class="drawer-mask" id="drawer-mask" hidden></div>
 
-    <!-- ── 设置面板 ───────────────────────────────────────── -->
+    <!-- ── 设置 ──────────────────────────────────────────── -->
     <div class="mask" id="mask" hidden>
       <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <div class="dialog-head">
@@ -177,50 +300,168 @@
           </button>
         </div>
 
-        <div class="field">
-          <label for="settings-engine">翻译引擎</label>
-          <select id="settings-engine"></select>
-          <p class="hint" id="settings-engine-note"></p>
-        </div>
+        <div class="dialog-body">
+          <div class="field">
+            <label for="settings-engine">翻译引擎</label>
+            <select id="settings-engine"></select>
+          </div>
 
-        <div class="field">
-          <label for="proxy">代理地址</label>
-          <input
-            id="proxy"
-            type="text"
-            placeholder="http://127.0.0.1:7890  或  socks5://127.0.0.1:1080"
-          />
-          <p class="hint">
-            仅 Google 引擎需要代理。有道的两个引擎强制直连，不受此处影响。
-            留空使用系统代理或环境代理。
-          </p>
-        </div>
+          <div class="field">
+            <label for="settings-theme">皮肤</label>
+            <select id="settings-theme"></select>
+          </div>
 
-        <div class="field">
-          <label class="row-label">
-            <input id="auto-translate" type="checkbox" checked />
-            <span>输入停顿后自动翻译</span>
-          </label>
-        </div>
+          <div class="field">
+            <label for="settings-font">字号</label>
+            <select id="settings-font"></select>
+          </div>
 
-        <div class="field">
-          <label class="row-label">
-            <input id="auto-speak" type="checkbox" />
-            <span>单词翻译完成后自动朗读</span>
-          </label>
-        </div>
+          <div class="field">
+            <label for="settings-window">默认窗口大小</label>
+            <select id="settings-window"></select>
+            <label class="row-label spaced">
+              <input id="remember-window" type="checkbox" />
+              <span>记住我调整后的窗口大小</span>
+            </label>
+          </div>
 
-        <div class="field">
-          <label class="row-label">
-            <input id="record-history" type="checkbox" checked />
-            <span>记录翻译历史（不设条数上限）</span>
-          </label>
-          <p class="hint">关闭后不再写入新记录，已有历史不受影响。</p>
+          <div class="field">
+            <label for="proxy">代理地址</label>
+            <input
+              id="proxy"
+              type="text"
+              placeholder="http://127.0.0.1:7890  或  socks5://127.0.0.1:1080"
+            />
+          </div>
+
+          <div class="field">
+            <label class="row-label">
+              <input id="auto-translate" type="checkbox" checked />
+              <span>输入停顿后自动翻译</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="row-label">
+              <input id="auto-speak" type="checkbox" />
+              <span>单词翻译完成后自动朗读</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="row-label">
+              <input id="record-history" type="checkbox" checked />
+              <span>记录翻译历史</span>
+            </label>
+          </div>
         </div>
 
         <div class="dialog-foot">
           <span class="hint" id="settings-msg"></span>
           <button id="btn-save-settings" class="primary">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 说明 ──────────────────────────────────────────── -->
+    <div class="mask" id="help-mask" hidden>
+      <div class="dialog wide" role="dialog" aria-modal="true" aria-labelledby="help-title">
+        <div class="dialog-head">
+          <h2 id="help-title">说明</h2>
+          <button id="btn-close-help" class="icon-btn" title="关闭">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="dialog-body" id="help-body">
+          <section id="help-engines">
+            <h3>翻译引擎</h3>
+            <p>三个引擎都不需要申请密钥。工具栏或设置里可以随时切换，切换后当前文本会用新引擎重翻。</p>
+            <div class="table-wrap">
+              <table class="help-table" id="help-engine-table">
+                <thead>
+                  <tr>
+                    <th>引擎</th>
+                    <th>代理</th>
+                    <th>整句</th>
+                    <th>词典</th>
+                    <th>发音</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <ul class="help-list" id="help-engine-notes"></ul>
+          </section>
+
+          <section id="help-keys">
+            <h3>快捷键</h3>
+            <table class="help-table keys">
+              <tbody>
+                <tr><th><kbd>Ctrl</kbd> + <kbd>Enter</kbd></th><td>立即翻译，不等自动翻译的停顿</td></tr>
+                <tr><th><kbd>Esc</kbd></th><td>清空输入框</td></tr>
+                <tr><th><kbd>Ctrl</kbd> + <kbd>H</kbd></th><td>打开翻译历史</td></tr>
+                <tr><th><kbd>F1</kbd></th><td>打开本说明</td></tr>
+                <tr><th><kbd>Alt</kbd></th><td>聚焦菜单栏，随后用 ← → 选菜单、↑ ↓ 选项、Enter 执行</td></tr>
+                <tr><th>双击菜单栏</th><td>放大 / 还原窗口</td></tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section id="help-history">
+            <h3>历史与导出</h3>
+            <p>
+              翻译记录存在本机 SQLite 数据库里，<b>不设条数上限，也不会自动清理</b>。
+              工具栏的「历史」按钮或 <kbd>Ctrl</kbd> + <kbd>H</kbd> 打开抽屉，点任意一条能把完整结果回填到主界面。
+            </p>
+            <p>导出从数据库流式读取，不受内存限制，四种格式：</p>
+            <table class="help-table">
+              <thead><tr><th>格式</th><th>扩展名</th><th>用途</th></tr></thead>
+              <tbody>
+                <tr><td>CSV 表格</td><td>.csv</td><td>Excel 直接打开，带 BOM 不会乱码</td></tr>
+                <tr><td>Markdown</td><td>.md</td><td>按日期分组，适合当学习笔记</td></tr>
+                <tr><td>Anki 导入</td><td>.txt</td><td>两列制表符分隔，基本型可直接导入</td></tr>
+                <tr><td>JSON 备份</td><td>.json</td><td>含完整结果，用于备份或二次处理</td></tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section id="help-network">
+            <h3>代理与网络</h3>
+            <p>
+              代理地址只影响 Google 引擎；有道的两个引擎强制直连，不受代理设置影响。
+              留空时使用系统代理或环境变量里的代理。
+            </p>
+            <p>支持 HTTP、HTTPS、SOCKS5、SOCKS5H，地址要写完整，例如 <code>http://127.0.0.1:7890</code>。</p>
+          </section>
+
+          <section id="help-paths">
+            <h3>数据位置</h3>
+            <table class="help-table keys" id="help-paths-table">
+              <tbody></tbody>
+            </table>
+            <p>设置文件里可能包含代理凭据，分享前请自行检查。</p>
+          </section>
+
+          <section id="help-about">
+            <h3>关于</h3>
+            <p>
+              Translater，基于 Tauri 2、Rust 与 TypeScript 的桌面翻译器。
+              界面与后端都离线运行，只有翻译请求会发往所选引擎。
+            </p>
+            <p>
+              三个引擎用的都是公开的非官方接口，服务可用性和词典字段由上游决定；
+              HTTP 429 会做有限次数的退避重试，其他失败会给出可恢复的错误提示。
+            </p>
+            <p id="help-version"></p>
+          </section>
+        </div>
+
+        <div class="dialog-foot">
+          <span class="hint">皮肤与字号在「视图」菜单里切换</span>
+          <button id="btn-close-help-2" class="primary">知道了</button>
         </div>
       </div>
     </div>

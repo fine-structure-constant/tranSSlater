@@ -1,6 +1,7 @@
-/** 应用主逻辑：输入 → 翻译 → 渲染；引擎切换；历史库与导出。 */
+/** 应用主逻辑：输入 → 翻译 → 渲染；菜单栏；引擎切换；历史库与导出。 */
 
 import {
+  appInfo,
   cacheStats,
   clearCache,
   engines as fetchEngines,
@@ -10,16 +11,26 @@ import {
   historyGet,
   historyList,
   historyStats,
+  quitApp,
+  resizeWindow,
+  toggleMaximize,
   translate,
+  type AppInfo,
 } from "./api";
 import { isTauri } from "@tauri-apps/api/core";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import {
   DEFAULTS,
   EXPORT_FORMATS,
+  FONT_SCALES,
+  THEMES,
+  WINDOW_MIN,
+  WINDOW_PRESETS,
   defaultExportName,
   loadSettings,
+  normalizeSettings,
   saveSettings,
+  windowLabel,
   type Settings,
 } from "./settings";
 import { renderResult } from "./render";
@@ -39,7 +50,6 @@ const alertBox = $("alert");
 const status = $("status");
 const langPair = $<HTMLSelectElement>("lang-pair");
 const enginePick = $<HTMLSelectElement>("engine");
-const engineNote = $("engine-note");
 const cacheSize = $("cache-size");
 const historyCount = $("history-count");
 const mask = $("mask");
@@ -48,8 +58,14 @@ const autoTranslateInput = $<HTMLInputElement>("auto-translate");
 const autoSpeakInput = $<HTMLInputElement>("auto-speak");
 const recordHistoryInput = $<HTMLInputElement>("record-history");
 const settingsEngine = $<HTMLSelectElement>("settings-engine");
-const settingsEngineNote = $("settings-engine-note");
+const settingsTheme = $<HTMLSelectElement>("settings-theme");
+const settingsFont = $<HTMLSelectElement>("settings-font");
+const settingsWindow = $<HTMLSelectElement>("settings-window");
+const rememberWindowInput = $<HTMLInputElement>("remember-window");
 const settingsMsg = $("settings-msg");
+
+const helpMask = $("help-mask");
+const helpBody = $("help-body");
 
 const drawer = $("drawer");
 const drawerMask = $("drawer-mask");
@@ -60,6 +76,9 @@ const historyMsg = $("history-msg");
 const exportFormat = $<HTMLSelectElement>("export-format");
 const exportHint = $("export-hint");
 const historyMore = $<HTMLButtonElement>("btn-history-more");
+
+const menubar = $("menubar");
+const menus = Array.from(menubar.querySelectorAll<HTMLElement>(".menu"));
 
 // ── 设置与运行时状态 ────────────────────────────────────────
 
@@ -74,6 +93,11 @@ let seq = 0;
 let current: TranslateResult | null = null;
 let debounceTimer: number | undefined;
 let audio: HTMLAudioElement | null = null;
+
+/// 窗口缩放落盘的防抖句柄
+let resizeTimer: number | undefined;
+/// 「说明」里的引擎表格只需填一次
+let helpFilled = false;
 
 const PAGE_SIZE = 50;
 let historyOffset = 0;
@@ -104,10 +128,44 @@ function fillEngineOptions(): void {
   }
 }
 
-function updateEngineNote(): void {
-  const info = engineList.find((e) => e.id === enginePick.value);
-  engineNote.textContent = info?.note ?? "";
-  engineNote.title = info?.note ?? "";
+// ── 皮肤与字号 ──────────────────────────────────────────────
+
+/**
+ * 皮肤和字号都只是 `<html>` 上的一个属性：CSS 里所有颜色/圆角走 `[data-theme]`，
+ * 所有字号乘 `[data-font]` 给出的 `--fs`。这里不做任何布局改动。
+ */
+function applyAppearance(): void {
+  document.documentElement.dataset.theme = settings.theme;
+  document.documentElement.dataset.font = settings.font;
+}
+
+async function setTheme(theme: string): Promise<void> {
+  if (!THEMES.some((t) => t.id === theme) || theme === settings.theme) return;
+  settings.theme = theme;
+  applyAppearance();
+  settingsTheme.value = theme;
+  syncMenuChecks();
+  try {
+    await saveSettings(settings);
+    setStatus(`已切换到 ${THEMES.find((t) => t.id === theme)?.label ?? theme}`);
+    window.setTimeout(() => setStatus(""), 1600);
+  } catch (err) {
+    showAlert(`皮肤设置未保存：${String(err)}`);
+  }
+}
+
+async function setFont(font: string): Promise<void> {
+  if (!FONT_SCALES.some((f) => f.id === font) || font === settings.font) return;
+  settings.font = font;
+  applyAppearance();
+  settingsFont.value = font;
+  syncMenuChecks();
+  autoGrow();
+  try {
+    await saveSettings(settings);
+  } catch (err) {
+    showAlert(`字号设置未保存：${String(err)}`);
+  }
 }
 
 // ── 翻译主流程 ──────────────────────────────────────────────
@@ -233,6 +291,14 @@ function onInput(): void {
   const delay = text.length <= 120 ? 650 : 1100;
   debounceTimer = window.setTimeout(() => void run(text), delay);
 }
+/** 清空输入框并回到初始状态。菜单、Esc 与输入框的 × 都走这里。 */
+function clearInput(): void {
+  input.value = "";
+  autoGrow();
+  reset();
+  input.focus();
+}
+
 input.addEventListener("input", onInput);
 input.addEventListener("compositionstart", () => {
   composing = true;
@@ -242,19 +308,26 @@ input.addEventListener("compositionend", () => {
   composing = false;
   onInput();
 });
-window.addEventListener("resize", autoGrow);
+
+/** 窗口尺寸一变：输入框跟着长，开了「记住窗口大小」就把新尺寸落盘。 */
+window.addEventListener("resize", () => {
+  autoGrow();
+  if (!settings.rememberWindow || !isTauri()) return;
+  window.clearTimeout(resizeTimer);
+  resizeTimer = window.setTimeout(() => void persistWindowSize(), 600);
+});
 
 input.addEventListener("keydown", (e) => {
-  if (e.isComposing || !mask.hidden) return;
+  if (e.isComposing || !mask.hidden || !helpMask.hidden) return;
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
     e.preventDefault();
     window.clearTimeout(debounceTimer);
     void run(input.value);
   } else if (e.key === "Escape") {
+    // 菜单开着时先关菜单，交给全局处理器，别顺手把输入清掉
+    if (menuIsOpen()) return;
     e.preventDefault();
-    input.value = "";
-    autoGrow();
-    reset();
+    clearInput();
   }
 });
 
@@ -265,10 +338,7 @@ document.querySelector(".query-actions")?.addEventListener("click", (e) => {
   if (!act) return;
 
   if (act === "clear") {
-    input.value = "";
-    autoGrow();
-    reset();
-    input.focus();
+    clearInput();
   } else if (act === "go") {
     window.clearTimeout(debounceTimer);
     void run(input.value);
@@ -441,7 +511,6 @@ langPair.addEventListener("change", () => {
 
 enginePick.addEventListener("change", () => {
   settings.engine = enginePick.value;
-  updateEngineNote();
   void saveSettings(settings).catch((err) => showAlert(`引擎选择未保存：${String(err)}`));
   if (input.value.trim()) {
     window.clearTimeout(debounceTimer);
@@ -629,18 +698,35 @@ historySearch.addEventListener("input", () => {
   }, 220);
 });
 
-$("btn-clear-history").addEventListener("click", async () => {
-  if (!historyTotal) return;
+$("btn-clear-history").addEventListener("click", () => void clearAllHistory());
+
+/** 清空整个历史库。抽屉按钮与「文件」菜单共用。 */
+async function clearAllHistory(): Promise<void> {
+  if (!historyTotal) {
+    try {
+      historyTotal = (await historyStats()).total;
+    } catch {
+      /* 读不到就当没有 */
+    }
+  }
+  if (!historyTotal) {
+    setStatus("还没有翻译记录");
+    return;
+  }
   if (!window.confirm(`确定清空全部 ${historyTotal} 条历史？此操作不可撤销。`)) return;
   try {
     const n = await historyClear();
     historyMsg.textContent = `已清空 ${n} 条`;
+    historyTotal = 0;
+    historyOffset = 0;
     await refreshHistoryStat();
-    await loadHistory(true);
+    if (!drawer.hidden) await loadHistory(true);
+    setStatus(`已清空 ${n} 条历史`);
   } catch (err) {
     historyMsg.textContent = `清空失败：${String(err)}`;
+    showAlert(`清空历史失败：${String(err)}`);
   }
-});
+}
 
 // ── 导出 ────────────────────────────────────────────────────
 
@@ -651,17 +737,34 @@ function updateExportHint(): void {
 
 exportFormat.addEventListener("change", updateExportHint);
 
-$("btn-export").addEventListener("click", async () => {
-  const format = exportFormat.value as ExportFormat;
+$("btn-export").addEventListener("click", () =>
+  void runExport(exportFormat.value as ExportFormat),
+);
+
+/**
+ * 导出历史。抽屉的「导出」按钮与「文件」菜单共用这一条路径，
+ * 所以从菜单里选格式也能得到同样的进度与错误反馈。
+ */
+async function runExport(format: ExportFormat): Promise<void> {
   const meta = EXPORT_FORMATS.find((f) => f.id === format);
   if (!meta) return;
 
   if (!isTauri()) {
     historyMsg.textContent = "浏览器预览下无法导出，请运行桌面程序。";
+    showAlert("浏览器预览下无法导出，请运行 dev.bat 或桌面程序。");
     return;
   }
-  if (!historyTotal) {
+  if (historyTotal <= 0) {
+    try {
+      historyTotal = (await historyStats()).total;
+      renderHistoryStat();
+    } catch {
+      /* 读不到就当空 */
+    }
+  }
+  if (historyTotal <= 0) {
     historyMsg.textContent = "还没有可导出的记录。";
+    showAlert("还没有可导出的记录。");
     return;
   }
 
@@ -679,20 +782,62 @@ $("btn-export").addEventListener("click", async () => {
     }
     const n = await exportHistory(format, path);
     historyMsg.textContent = `已导出 ${n} 条到 ${path}`;
+    setStatus(`已导出 ${n} 条`);
   } catch (err) {
     historyMsg.textContent = `导出失败：${String(err)}`;
+    showAlert(`导出失败：${String(err)}`);
   } finally {
     button.disabled = false;
   }
-});
+}
 
 // ── 设置弹窗 ────────────────────────────────────────────────
 
-function syncEngineNote(): void {
-  const info = engineList.find((e) => e.id === settingsEngine.value);
-  settingsEngineNote.textContent = info
-    ? `${info.note}${info.needsProxy ? "（需要代理）" : "（无需代理）"}`
-    : "";
+/** 用一个常量数组重建下拉框的选项。 */
+function fillSelect(
+  select: HTMLSelectElement,
+  items: { value: string; label: string }[],
+): void {
+  select.replaceChildren();
+  for (const item of items) {
+    const option = document.createElement("option");
+    option.value = item.value;
+    option.textContent = item.label;
+    select.appendChild(option);
+  }
+}
+
+function fillWindowOptions(): void {
+  fillSelect(
+    settingsWindow,
+    WINDOW_PRESETS.map((p) => ({
+      value: windowKey(p.width, p.height),
+      label: `${p.label} ${p.width} × ${p.height}`,
+    })),
+  );
+}
+
+/** 皮肤 / 字号 / 窗口尺寸三个下拉框都从常量生成，避免和菜单里的选项对不上。 */
+function fillSettingsOptions(): void {
+  fillSelect(settingsTheme, THEMES.map((t) => ({ value: t.id, label: t.label })));
+  fillSelect(settingsFont, FONT_SCALES.map((f) => ({ value: f.id, label: f.label })));
+  fillWindowOptions();
+}
+
+/**
+ * 当前尺寸不在预设里时补一个选项，否则下拉框会悄悄跳到别的预设上。
+ * 每次调用先重建预设，避免上一轮的「当前 xxx」残留在列表里。
+ */
+function syncWindowOptions(width: number, height: number): void {
+  fillWindowOptions();
+  const key = windowKey(width, height);
+  if (!WINDOW_PRESETS.some((p) => windowKey(p.width, p.height) === key)) {
+    const option = document.createElement("option");
+    option.value = key;
+    option.textContent = `当前 ${width} × ${height}`;
+    settingsWindow.appendChild(option);
+  }
+  settingsWindow.value = key;
 }
 
 function openSettings(): void {
@@ -701,7 +846,10 @@ function openSettings(): void {
   autoSpeakInput.checked = settings.autoSpeak;
   recordHistoryInput.checked = settings.historyMode === "all";
   settingsEngine.value = settings.engine;
-  syncEngineNote();
+  settingsTheme.value = settings.theme;
+  settingsFont.value = settings.font;
+  rememberWindowInput.checked = settings.rememberWindow;
+  syncWindowOptions(settings.windowWidth, settings.windowHeight);
   settingsMsg.textContent = "";
   settingsMsg.style.color = "";
   mask.hidden = false;
@@ -716,7 +864,6 @@ function closeSettings(): void {
 
 $("btn-settings").addEventListener("click", openSettings);
 $("btn-close-settings").addEventListener("click", closeSettings);
-settingsEngine.addEventListener("change", syncEngineNote);
 
 mask.addEventListener("click", (e) => {
   if (e.target === mask) closeSettings();
@@ -724,6 +871,7 @@ mask.addEventListener("click", (e) => {
 
 $("btn-save-settings").addEventListener("click", async () => {
   if (saving || !ready) return;
+  const [width, height] = settingsWindow.value.split("x").map(Number);
   const next: Settings = {
     ...settings,
     proxy: proxyInput.value.trim(),
@@ -731,7 +879,15 @@ $("btn-save-settings").addEventListener("click", async () => {
     autoSpeak: autoSpeakInput.checked,
     engine: settingsEngine.value,
     historyMode: recordHistoryInput.checked ? "all" : "off",
+    theme: settingsTheme.value,
+    font: settingsFont.value,
+    windowWidth: Number.isFinite(width) ? width : settings.windowWidth,
+    windowHeight: Number.isFinite(height) ? height : settings.windowHeight,
+    rememberWindow: rememberWindowInput.checked,
   };
+  const resized =
+    next.windowWidth !== settings.windowWidth || next.windowHeight !== settings.windowHeight;
+
   const button = $<HTMLButtonElement>("btn-save-settings");
   saving = true;
   button.disabled = true;
@@ -749,7 +905,13 @@ $("btn-save-settings").addEventListener("click", async () => {
     await saveSettings(next);
     settings = next;
     enginePick.value = settings.engine;
-    updateEngineNote();
+    applyAppearance();
+    syncMenuChecks();
+    if (resized) {
+      await resizeWindow(settings.windowWidth, settings.windowHeight).catch((err) =>
+        showAlert(`调整窗口失败：${String(err)}`),
+      );
+    }
     settingsMsg.textContent = "已保存";
     saving = false;
     closeSettings();
@@ -764,8 +926,400 @@ $("btn-save-settings").addEventListener("click", async () => {
   }
 });
 
+// ── 说明弹窗 ────────────────────────────────────────────────
+
+/**
+ * 界面上不再挂小字说明，引擎能力、快捷键、数据位置统一放在这里。
+ * 引擎表格由后端返回的 `EngineInfo` 驱动，加引擎不用改这个文件。
+ */
+function fillHelpEngines(): void {
+  if (helpFilled) return;
+  helpFilled = true;
+
+  const tbody = $("help-engine-table").querySelector("tbody");
+  const notes = $("help-engine-notes");
+  tbody?.replaceChildren();
+  notes.replaceChildren();
+
+  for (const info of engineList) {
+    const row = document.createElement("tr");
+    for (const text of [
+      info.name,
+      info.needsProxy ? "需要" : "直连",
+      info.supportsSentence ? "✓" : "—",
+      info.supportsDictionary ? "✓" : "—",
+      info.supportsAudio ? "✓" : "—",
+    ]) {
+      const cell = document.createElement("td");
+      cell.textContent = text;
+      row.appendChild(cell);
+    }
+    tbody?.appendChild(row);
+
+    const li = document.createElement("li");
+    const name = document.createElement("b");
+    name.textContent = info.name;
+    li.append(name, document.createTextNode(`：${info.note}`));
+    notes.appendChild(li);
+  }
+
+  if (engineList.length === 0) {
+    const li = document.createElement("li");
+    li.textContent = "浏览器预览下读不到引擎列表，运行桌面程序后这里会列出三个引擎。";
+    notes.appendChild(li);
+  }
+}
+
+async function fillHelpPaths(): Promise<void> {
+  let info: AppInfo | null = null;
+  try {
+    info = await appInfo();
+  } catch {
+    info = null;
+  }
+
+  const rows: [string, string][] = info
+    ? [
+        ["版本", info.version],
+        ["设置文件", info.settingsPath],
+        ["历史数据库", info.historyPath],
+        ["配置目录", info.configDir],
+        ["数据目录", info.dataDir],
+      ]
+    : [
+        ["版本", "浏览器预览"],
+        ["设置文件", "—"],
+        ["历史数据库", "—"],
+        ["配置目录", "—"],
+        ["数据目录", "—"],
+      ];
+
+  const tbody = $("help-paths-table").querySelector("tbody");
+  tbody?.replaceChildren();
+  for (const [label, value] of rows) {
+    const row = document.createElement("tr");
+    const th = document.createElement("th");
+    th.textContent = label;
+    const td = document.createElement("td");
+    td.textContent = value;
+    row.append(th, td);
+    tbody?.appendChild(row);
+  }
+
+  $("help-version").textContent = info
+    ? `当前版本 ${info.version}，设置文件在 ${info.settingsPath}。`
+    : "浏览器预览模式，不读取本机路径。";
+}
+
+function openHelp(section: string): void {
+  fillHelpEngines();
+  void fillHelpPaths();
+  helpMask.hidden = false;
+  helpBody.scrollTop = 0;
+  $("btn-close-help").focus();
+
+  if (section && section !== "all") {
+    const target = document.getElementById(`help-${section}`);
+    // 等弹窗完成布局再滚动，否则算出来的位置是旧的
+    if (target) requestAnimationFrame(() => target.scrollIntoView({ block: "start" }));
+  }
+}
+
+function closeHelp(): void {
+  helpMask.hidden = true;
+  const last = menus[menus.length - 1];
+  const button = last?.querySelector<HTMLButtonElement>(".menu-btn");
+  (button ?? $("btn-settings")).focus();
+}
+
+$("btn-close-help").addEventListener("click", closeHelp);
+$("btn-close-help-2").addEventListener("click", closeHelp);
+helpMask.addEventListener("click", (e) => {
+  if (e.target === helpMask) closeHelp();
+});
+
+// ── 菜单栏 ──────────────────────────────────────────────────
+
+interface MenuParts {
+  button: HTMLButtonElement;
+  popup: HTMLElement;
+}
+
+function menuParts(menu: HTMLElement): MenuParts {
+  return {
+    button: menu.querySelector<HTMLButtonElement>(".menu-btn")!,
+    popup: menu.querySelector<HTMLElement>(".menu-pop")!,
+  };
+}
+
+function menuItems(popup: HTMLElement): HTMLButtonElement[] {
+  return Array.from(popup.querySelectorAll<HTMLButtonElement>(".menu-item"));
+}
+
+function menuIsOpen(): boolean {
+  return menus.some((m) => menuParts(m).button.getAttribute("aria-expanded") === "true");
+}
+
+function openMenu(menu: HTMLElement, focusFirstItem = false): void {
+  for (const other of menus) {
+    const { button, popup } = menuParts(other);
+    const active = other === menu;
+    button.setAttribute("aria-expanded", String(active));
+    popup.hidden = !active;
+  }
+  if (focusFirstItem) menuItems(menuParts(menu).popup)[0]?.focus();
+}
+
+function menuCloseAll(restoreFocus = false): void {
+  const opened = menus.find(
+    (m) => menuParts(m).button.getAttribute("aria-expanded") === "true",
+  );
+  for (const menu of menus) {
+    const { button, popup } = menuParts(menu);
+    button.setAttribute("aria-expanded", "false");
+    popup.hidden = true;
+  }
+  if (restoreFocus && opened) menuParts(opened).button.focus();
+}
+
+/** 把「视图」菜单里的单选 / 复选标记对齐到当前设置。 */
+function syncMenuChecks(): void {
+  const state: Record<string, string | boolean> = {
+    theme: settings.theme,
+    font: settings.font,
+    window: windowKey(settings.windowWidth, settings.windowHeight),
+    "remember-window": settings.rememberWindow,
+  };
+  for (const item of menubar.querySelectorAll<HTMLButtonElement>(".menu-item")) {
+    const cmd = item.dataset.cmd ?? "";
+    if (!(cmd in state)) continue;
+    const expected = state[cmd];
+    const on = typeof expected === "boolean" ? expected : item.dataset.arg === expected;
+    item.classList.toggle("on", on);
+    item.setAttribute("aria-checked", String(on));
+  }
+}
+
+menubar.addEventListener("click", (e) => {
+  const target = e.target as HTMLElement;
+  const button = target.closest<HTMLButtonElement>(".menu-btn");
+  if (button) {
+    const menu = button.closest<HTMLElement>(".menu")!;
+    if (button.getAttribute("aria-expanded") === "true") menuCloseAll();
+    else openMenu(menu);
+    return;
+  }
+  const item = target.closest<HTMLButtonElement>(".menu-item");
+  if (item) {
+    menuCloseAll();
+    void runCommand(item.dataset.cmd ?? "", item.dataset.arg ?? "");
+  }
+});
+
+// 菜单已经打开时，滑到另一个标题就跟着切，和原生菜单栏一致
+for (const menu of menus) {
+  menuParts(menu).button.addEventListener("pointerenter", () => {
+    if (!menuIsOpen()) return;
+    if (!menuParts(menu).popup.hidden) return; // 已经是展开的那个
+    openMenu(menu);
+  });
+}
+
+menubar.addEventListener("keydown", (e) => {
+  const target = e.target as HTMLElement;
+  const button = target.closest<HTMLButtonElement>(".menu-btn");
+  if (button) {
+    const menu = button.closest<HTMLElement>(".menu")!;
+    const index = menus.indexOf(menu);
+    if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+      e.preventDefault();
+      const step = e.key === "ArrowRight" ? 1 : menus.length - 1;
+      const next = menus[(index + step) % menus.length];
+      openMenu(next);
+      menuParts(next).button.focus();
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      openMenu(menu, true);
+    }
+    return;
+  }
+
+  const item = target.closest<HTMLButtonElement>(".menu-item");
+  if (!item) return;
+  const popup = item.closest<HTMLElement>(".menu-pop")!;
+  const items = menuItems(popup);
+  const index = items.indexOf(item);
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    const step = e.key === "ArrowDown" ? 1 : items.length - 1;
+    items[(index + step) % items.length].focus();
+  } else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+    e.preventDefault();
+    const menu = popup.closest<HTMLElement>(".menu")!;
+    const at = menus.indexOf(menu);
+    const step = e.key === "ArrowRight" ? 1 : menus.length - 1;
+    const next = menus[(at + step) % menus.length];
+    openMenu(next);
+    menuParts(next).button.focus();
+  }
+});
+
+document.addEventListener("pointerdown", (e) => {
+  if (!menuIsOpen()) return;
+  if (!menubar.contains(e.target as Node)) menuCloseAll();
+});
+
+/** 双击窗口框架放大 / 还原（菜单按钮除外，双击它们只该开关菜单）。 */
+document.querySelector<HTMLElement>(".chrome")?.addEventListener("dblclick", (e) => {
+  if ((e.target as HTMLElement).closest("button")) return;
+  void toggleMaximize().catch(() => {});
+});
+
+// ── 菜单命令 ────────────────────────────────────────────────
+
+async function runCommand(cmd: string, arg: string): Promise<void> {
+  switch (cmd) {
+    case "export": {
+      const format = EXPORT_FORMATS.find((f) => f.id === arg)?.id;
+      if (!format) return;
+      exportFormat.value = format;
+      updateExportHint();
+      await runExport(format);
+      return;
+    }
+    case "open-history":
+      void openHistory();
+      return;
+    case "clear-history":
+      await clearAllHistory();
+      return;
+    case "settings":
+      openSettings();
+      return;
+    case "quit":
+      await quitApp().catch((err) => showAlert(`退出失败：${String(err)}`));
+      return;
+    case "translate":
+      window.clearTimeout(debounceTimer);
+      void run(input.value);
+      return;
+    case "copy":
+      await copyTranslation();
+      return;
+    case "speak":
+      speak(input.value.trim(), current?.sourceLang ?? "en", current?.speakUrl ?? null);
+      return;
+    case "swap":
+      $("btn-swap").click();
+      return;
+    case "clear-input":
+      clearInput();
+      return;
+    case "clear-cache":
+      $("btn-clear-cache").click();
+      return;
+    case "theme":
+      await setTheme(arg);
+      return;
+    case "font":
+      await setFont(arg);
+      return;
+    case "window":
+      await applyWindowPreset(arg);
+      return;
+    case "remember-window":
+      await toggleRememberWindow();
+      return;
+    case "help":
+      openHelp(arg || "all");
+      return;
+    default:
+  }
+}
+
+/** `1280x820` → 立刻改窗口尺寸并记住。 */
+async function applyWindowPreset(preset: string): Promise<void> {
+  const [width, height] = preset.split("x").map(Number);
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return;
+  await setWindowSize(width, height);
+}
+
+async function setWindowSize(width: number, height: number): Promise<void> {
+  settings.windowWidth = width;
+  settings.windowHeight = height;
+  syncWindowOptions(width, height);
+  syncMenuChecks();
+  try {
+    await resizeWindow(width, height);
+  } catch (err) {
+    showAlert(`调整窗口失败：${String(err)}`);
+  }
+  try {
+    await saveSettings(settings);
+    setStatus(windowLabel(width, height));
+    window.setTimeout(() => setStatus(""), 1600);
+  } catch (err) {
+    showAlert(`窗口尺寸未保存：${String(err)}`);
+  }
+}
+
+/** 用户自己拖出来的尺寸，只在「记住窗口大小」打开时才覆盖默认值。 */
+async function persistWindowSize(): Promise<void> {
+  const width = Math.round(window.innerWidth);
+  const height = Math.round(window.innerHeight);
+  if (width < WINDOW_MIN.width || height < WINDOW_MIN.height) return;
+  if (width === settings.windowWidth && height === settings.windowHeight) return;
+  settings.windowWidth = width;
+  settings.windowHeight = height;
+  syncWindowOptions(width, height);
+  syncMenuChecks();
+  try {
+    await saveSettings(settings);
+  } catch {
+    /* 静默失败：缩放窗口不该弹错误框打断操作 */
+  }
+}
+
+async function toggleRememberWindow(): Promise<void> {
+  settings.rememberWindow = !settings.rememberWindow;
+  rememberWindowInput.checked = settings.rememberWindow;
+  syncMenuChecks();
+  try {
+    await saveSettings(settings);
+    setStatus(settings.rememberWindow ? "已记住窗口大小" : "不再记住窗口大小");
+    window.setTimeout(() => setStatus(""), 1600);
+  } catch (err) {
+    showAlert(`设置未保存：${String(err)}`);
+  }
+}
+
+/** `1020x760`，菜单项与下拉框共用的键。 */
+function windowKey(width: number, height: number): string {
+  return `${width}x${height}`;
+}
+
+/** 弹窗内的 Tab 循环，防止焦点跑到弹窗背后的界面上。 */
+function trapFocus(e: KeyboardEvent, container: HTMLElement): void {
+  if (e.key !== "Tab") return;
+  const controls = Array.from(
+    container.querySelectorAll<HTMLElement>(
+      "button:not(:disabled), input:not(:disabled), select:not(:disabled)",
+    ),
+  );
+  const first = controls[0];
+  const last = controls[controls.length - 1];
+  if (!first || !last) return;
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
+}
+
 document.addEventListener("keydown", (e) => {
-  // 历史抽屉优先响应
+  // 覆盖层优先级：历史抽屉 > 说明 > 设置 > 菜单
   if (!drawer.hidden) {
     if (e.key === "Escape") {
       e.preventDefault();
@@ -773,30 +1327,46 @@ document.addEventListener("keydown", (e) => {
     }
     return;
   }
-  if (mask.hidden) {
-    if (e.key.toLowerCase() === "h" && (e.ctrlKey || e.metaKey)) {
+  if (!helpMask.hidden) {
+    if (e.key === "Escape") {
       e.preventDefault();
-      openHistory();
+      closeHelp();
     }
+    trapFocus(e, helpMask);
+    return;
+  }
+  if (!mask.hidden) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeSettings();
+    }
+    trapFocus(e, mask);
+    return;
+  }
+
+  if (e.key === "F1") {
+    e.preventDefault();
+    menuCloseAll();
+    openHelp("all");
+    return;
+  }
+  // Alt 聚焦菜单栏，之后用 ← → 选菜单、↑ ↓ 选项、Enter 执行
+  if (e.key === "Alt") {
+    e.preventDefault();
+    menus[0]?.querySelector<HTMLButtonElement>(".menu-btn")?.focus();
     return;
   }
   if (e.key === "Escape") {
-    e.preventDefault();
-    closeSettings();
-  }
-  if (e.key === "Tab") {
-    const controls = Array.from(
-      mask.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), select:not(:disabled)"),
-    );
-    const first = controls[0];
-    const last = controls[controls.length - 1];
-    if (e.shiftKey && document.activeElement === first) {
+    if (menuIsOpen()) {
       e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault();
-      first.focus();
+      menuCloseAll(true);
     }
+    return;
+  }
+  if (e.key.toLowerCase() === "h" && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    menuCloseAll();
+    void openHistory();
   }
 });
 
@@ -815,10 +1385,14 @@ async function boot(): Promise<void> {
   fillEngineOptions();
 
   try {
-    settings = await loadSettings();
+    settings = normalizeSettings(await loadSettings());
   } catch (err) {
     showAlert(`读取设置失败：${String(err)}。可打开设置重新保存。`);
   }
+
+  // 皮肤与字号尽早落地，免得先闪一下默认外观
+  applyAppearance();
+  fillSettingsOptions();
 
   if (!Array.from(langPair.options).some((o) => o.value === settings.langPair)) {
     settings.langPair = DEFAULTS.langPair;
@@ -828,7 +1402,9 @@ async function boot(): Promise<void> {
     settings.engine = engineList[0]?.id ?? DEFAULTS.engine;
   }
   enginePick.value = settings.engine;
-  updateEngineNote();
+  rememberWindowInput.checked = settings.rememberWindow;
+  syncWindowOptions(settings.windowWidth, settings.windowHeight);
+  syncMenuChecks();
   updateExportHint();
 
   ready = true;

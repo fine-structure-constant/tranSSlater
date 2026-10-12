@@ -29,13 +29,18 @@ struct AppState {
     cache: Mutex<TranslateCache>,
     history: Mutex<HistoryStore>,
     settings_path: PathBuf,
+    history_path: PathBuf,
+    config_dir: PathBuf,
+    data_dir: PathBuf,
 }
 
 impl AppState {
-    fn new(app: &tauri::AppHandle) -> Result<Self, Box<dyn std::error::Error>> {
+    /// 建状态，并把读到的设置一并返回：调用方还要拿它去定窗口尺寸。
+    fn new(app: &tauri::AppHandle) -> Result<(Self, settings::Settings), Box<dyn std::error::Error>> {
         let config_dir = app.path().app_config_dir()?;
         let data_dir = app.path().app_data_dir()?;
         let settings_path = config_dir.join("settings.json");
+        let history_path = data_dir.join("history.db");
 
         let engines = EngineHub::new(None)?;
         let valid: Vec<String> = engines.list().into_iter().map(|e| e.id).collect();
@@ -44,18 +49,24 @@ impl AppState {
         let loaded = settings::load(&settings_path, &valid).unwrap_or_default();
         engines.set_proxy(Some(&loaded.proxy))?;
 
-        let history = HistoryStore::open(&data_dir.join("history.db"))?;
+        let history = HistoryStore::open(&history_path)?;
 
-        Ok(Self {
-            engines,
-            runtime: RwLock::new(Runtime {
-                engine: loaded.engine.clone(),
-                record_history: loaded.history_mode == "all",
-            }),
-            cache: Mutex::new(TranslateCache::default()),
-            history: Mutex::new(history),
-            settings_path,
-        })
+        Ok((
+            Self {
+                engines,
+                runtime: RwLock::new(Runtime {
+                    engine: loaded.engine.clone(),
+                    record_history: loaded.history_mode == "all",
+                }),
+                cache: Mutex::new(TranslateCache::default()),
+                history: Mutex::new(history),
+                settings_path,
+                history_path,
+                config_dir,
+                data_dir,
+            },
+            loaded,
+        ))
     }
 
     fn runtime(&self) -> Runtime {
@@ -64,6 +75,17 @@ impl AppState {
 
     fn engine_ids(&self) -> Vec<String> {
         self.engines.list().into_iter().map(|e| e.id).collect()
+    }
+}
+
+/// 启动时把窗口调整到设置里保存的尺寸。窗口找不到或调用失败都不该阻止启动。
+fn apply_startup_window_size(app: &tauri::AppHandle, settings: &settings::Settings) {
+    let (width, height) = settings.window_size();
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    if let Err(err) = window.set_size(tauri::LogicalSize::new(width, height)) {
+        eprintln!("调整窗口尺寸失败：{err}");
     }
 }
 
@@ -156,6 +178,72 @@ fn cache_stats(state: tauri::State<'_, AppState>) -> CacheStats {
 #[tauri::command]
 fn clear_cache(state: tauri::State<'_, AppState>) {
     state.cache.lock().expect("cache 锁中毒").clear();
+}
+
+// ── 窗口与路径 ──────────────────────────────────────────────
+
+/// 应用元信息：版本号与各类数据文件的落盘位置，供「说明」对话框展示。
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AppInfo {
+    version: String,
+    settings_path: String,
+    history_path: String,
+    config_dir: String,
+    data_dir: String,
+}
+
+/// 把窗口调整到指定逻辑尺寸。越界的值收敛到边界，避免窗口跑到屏幕外。
+#[tauri::command]
+fn resize_window(
+    window: tauri::Window,
+    width: f64,
+    height: f64,
+) -> Result<(), TranslateError> {
+    let clamp = |v: f64, min: f64, max: f64| {
+        if v.is_finite() {
+            v.clamp(min, max)
+        } else {
+            min
+        }
+    };
+    let width = clamp(width, settings::WINDOW_MIN.0, settings::WINDOW_MAX.0);
+    let height = clamp(height, settings::WINDOW_MIN.1, settings::WINDOW_MAX.1);
+    window
+        .set_size(tauri::LogicalSize::new(width, height))
+        .map_err(|e| TranslateError::Settings(e.to_string()))
+}
+
+/// 放大 / 还原窗口。菜单栏双击走这里。
+#[tauri::command]
+fn toggle_maximize(window: tauri::Window) -> Result<bool, TranslateError> {
+    let maximized = window
+        .is_maximized()
+        .map_err(|e| TranslateError::Settings(e.to_string()))?;
+    let result = if maximized {
+        window.unmaximize()
+    } else {
+        window.maximize()
+    };
+    result
+        .map_err(|e| TranslateError::Settings(e.to_string()))
+        .map(|_| !maximized)
+}
+
+#[tauri::command]
+fn app_info(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> AppInfo {
+    AppInfo {
+        version: app.package_info().version.to_string(),
+        settings_path: state.settings_path.display().to_string(),
+        history_path: state.history_path.display().to_string(),
+        config_dir: state.config_dir.display().to_string(),
+        data_dir: state.data_dir.display().to_string(),
+    }
+}
+
+#[tauri::command]
+fn quit_app(app: tauri::AppHandle) {
+    app.exit(0);
 }
 
 #[tauri::command]
@@ -256,7 +344,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            let state = AppState::new(app.handle())?;
+            let (state, loaded) = AppState::new(app.handle())?;
+            apply_startup_window_size(app.handle(), &loaded);
             app.manage(state);
             Ok(())
         })
@@ -266,6 +355,10 @@ pub fn run() {
             set_proxy,
             cache_stats,
             clear_cache,
+            resize_window,
+            toggle_maximize,
+            app_info,
+            quit_app,
             load_settings,
             save_settings,
             history_list,

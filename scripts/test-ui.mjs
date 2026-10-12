@@ -21,6 +21,7 @@ try {
     window.fakeSettings = {
       proxy: "", autoTranslate: true, autoSpeak: false, langPair: "auto|zh-CN",
       engine: "google", historyMode: "all",
+      theme: "plain", font: "md", windowWidth: 1020, windowHeight: 760, rememberWindow: false,
     };
     window.fakeHistory = [
       { id: 2, query: "coercion", fromLang: "en", toLang: "zh-CN", engine: "youdao",
@@ -29,11 +30,14 @@ try {
         translation: "你好", isWord: true, createdAt: 1760000000000 },
     ];
     window.exportedTo = null;
+    window.resizedTo = null;
+    window.maximizeCalls = 0;
+    window.quitCalled = false;
     const cache = new Set();
     const engines = [
       { id: "google", name: "Google 翻译", note: "大陆需代理", needsProxy: true, supportsSentence: true, supportsDictionary: true, supportsAudio: false },
-      { id: "youdao", name: "有道词典", note: "国内直连，词典最全", needsProxy: false, supportsSentence: true, supportsDictionary: true, supportsAudio: true },
-      { id: "youdaoTrans", name: "有道翻译", note: "国内直连，词句皆可", needsProxy: false, supportsSentence: true, supportsDictionary: false, supportsAudio: true },
+      { id: "youdao", name: "有道词典", note: "国内直连，无需代理；柯林斯、专业释义、词源、词组短语、同根词最全", needsProxy: false, supportsSentence: true, supportsDictionary: true, supportsAudio: true },
+      { id: "youdaoTrans", name: "有道翻译", note: "国内直连，无需代理；单词与整句都能翻", needsProxy: false, supportsSentence: true, supportsDictionary: false, supportsAudio: true },
     ];
     window.__TAURI_INTERNALS__ = { invoke: async (cmd, args) => {
       window.calls.push({ cmd, args });
@@ -46,6 +50,16 @@ try {
       if (cmd === "engines") return engines;
       if (cmd === "cache_stats") return { size: cache.size };
       if (cmd === "clear_cache") { cache.clear(); return; }
+      if (cmd === "resize_window") { window.resizedTo = { width: args.width, height: args.height }; return; }
+      if (cmd === "toggle_maximize") { window.maximizeCalls++; return true; }
+      if (cmd === "quit_app") { window.quitCalled = true; return; }
+      if (cmd === "app_info") return {
+        version: "0.1.0",
+        settingsPath: "C:\\Users\\test\\AppData\\Roaming\\com.tauri-app.translater\\settings.json",
+        historyPath: "C:\\Users\\test\\AppData\\Roaming\\com.tauri-app.translater\\history.db",
+        configDir: "C:\\Users\\test\\AppData\\Roaming\\com.tauri-app.translater",
+        dataDir: "C:\\Users\\test\\AppData\\Roaming\\com.tauri-app.translater",
+      };
       if (cmd === "history_stats") return { total: window.fakeHistory.length, sizeBytes: 20480 };
       if (cmd === "history_list") {
         const filter = args.filter ?? "";
@@ -124,8 +138,17 @@ try {
   // ── 引擎选择器 ────────────────────────────────────────────
   check(await page.locator("#engine option").count() === 3, "engine selector is populated from the backend");
   check(await page.locator("#engine").inputValue() === "google", "engine selector restores the saved engine");
-  check((await page.locator("#engine-note").innerText()).includes("代理"), "engine note explains proxy requirement");
+  check(await page.locator("#engine-note").count() === 0,
+    "engine small print is gone from the toolbar");
   check((await page.locator("#history-count").innerText()) === "2", "toolbar shows the history total");
+
+  // ── 皮肤与字号 ────────────────────────────────────────────
+  check(await page.evaluate(() => document.documentElement.dataset.theme === "plain"),
+    "plain is the default skin");
+  check(await page.evaluate(() => document.documentElement.dataset.font === "md"),
+    "standard is the default font scale");
+  check(await page.locator(".spectrum").isHidden(),
+    "plain hides the rainbow stripe decoration");
 
   // ── 翻译与板块 ────────────────────────────────────────────
   await page.locator("#input").fill("hello");
@@ -227,10 +250,13 @@ try {
   await page.locator("#btn-settings").click();
   check(await page.locator("#mask").isVisible(), "settings open on demand");
   check(await page.locator("#settings-engine option").count() === 3, "settings dialog lists engines");
-  // 说明行展示的是所选引擎的 note（与工具栏 #engine-note 一致），不是引擎名。
-  const engineNote = await page.locator("#settings-engine-note").innerText();
-  check(engineNote.includes("国内直连") && engineNote.includes("无需代理"),
-    "settings dialog describes the selected engine");
+  check(await page.locator("#settings-theme option").count() === 2, "settings dialog lists every skin");
+  check(await page.locator("#settings-font option").count() === 4, "settings dialog lists every font scale");
+  check(await page.locator("#settings-window option").count() === 4, "settings dialog lists the window presets");
+  check(await page.locator("#settings-theme").inputValue() === "plain", "settings reflect the active skin");
+  check(await page.locator("#settings-font").inputValue() === "md", "settings reflect the active font scale");
+  check(await page.locator("#settings-window").inputValue() === "1020x760",
+    "settings reflect the active window size");
 
   await page.locator("#proxy").fill("invalid");
   await page.locator("#btn-save-settings").click();
@@ -296,6 +322,123 @@ try {
   check(await page.locator("#btn-settings").evaluate(el => el === document.activeElement),
     "closing dialog restores opener focus");
 
+  // ── 菜单：皮肤 / 字号 / 窗口 ──────────────────────────────
+  const menuTitle = (name) => page.locator(".menu-btn", { hasText: name });
+  // 把令牌换算成 rgb()，方便和元素的实际颜色比对
+  const tokenColor = (token) => page.evaluate((name) => {
+    const probe = document.createElement("span");
+    probe.style.color = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    document.body.appendChild(probe);
+    const rgb = getComputedStyle(probe).color;
+    probe.remove();
+    return rgb;
+  }, token);
+  const plainTextColor = await tokenColor("--text");
+
+  await menuTitle("视图").click();
+  check(await menuTitle("视图").getAttribute("aria-expanded") === "true",
+    "clicking a menu title expands it");
+  check(await page.locator('.menu-pop:not([hidden]) [data-cmd="theme"][data-arg="plain"]')
+    .getAttribute("aria-checked") === "true", "the active skin is marked in the menu");
+
+  await page.locator('[data-cmd="theme"][data-arg="meridian"]').click();
+  await page.waitForFunction(() => document.documentElement.dataset.theme === "meridian");
+  check(await page.locator(".menu-pop:not([hidden])").count() === 0, "picking a menu item closes the menu");
+  check(await menuTitle("视图").getAttribute("aria-expanded") === "false",
+    "the menu title drops its expanded state after a pick");
+  await page.waitForFunction(() => window.fakeSettings.theme === "meridian");
+  check(await page.evaluate(() => window.fakeSettings.theme === "meridian"), "skin choice is persisted");
+  check(await page.locator(".spectrum").isVisible(), "meridian shows the rainbow stripe");
+  check(await page.evaluate(() =>
+    getComputedStyle(document.documentElement).getPropertyValue("--radius").trim() === "3px"),
+    "meridian swaps the radius token");
+  const meridianTextColor = await tokenColor("--text");
+  check(meridianTextColor !== plainTextColor, "meridian overrides the text token");
+
+  // 换皮肤之后结果区（词典 / 例句 / 面板）也要跟着换色，且仍然可读
+  await page.locator("#input").fill("hello");
+  await page.locator("#input").press("Control+Enter");
+  await page.waitForFunction(() => document.querySelector(".main-trans")?.textContent === "译文：hello");
+  check(await page.evaluate(() => getComputedStyle(document.querySelector(".main-trans")).color)
+    === meridianTextColor, "the result text follows the --text token");
+  await page.waitForTimeout(250);
+  await page.screenshot({ path: "test-results/meridian.png" });
+
+  await menuTitle("视图").click();
+  await page.locator('[data-cmd="font"][data-arg="xl"]').click();
+  await page.waitForFunction(() => document.documentElement.dataset.font === "xl");
+  check(await page.evaluate(() =>
+    getComputedStyle(document.documentElement).getPropertyValue("--fs").trim() === "1.25"),
+    "font scale switches the --fs multiplier");
+  await page.waitForFunction(() => window.fakeSettings.font === "xl");
+  check(await page.evaluate(() => window.fakeSettings.font === "xl"), "font choice is persisted");
+
+  await menuTitle("视图").click();
+  await page.locator('[data-cmd="window"][data-arg="1280x820"]').click();
+  await page.waitForFunction(() => window.resizedTo !== null);
+  check(await page.evaluate(() => window.resizedTo.width === 1280 && window.resizedTo.height === 820),
+    "window preset resizes the window");
+  await page.waitForFunction(() => window.fakeSettings.windowWidth === 1280);
+  check(await page.evaluate(() => window.fakeSettings.windowWidth === 1280), "window preset is persisted");
+
+  await menuTitle("视图").click();
+  await page.locator('[data-cmd="remember-window"]').click();
+  await page.waitForFunction(() => window.fakeSettings.rememberWindow === true);
+  check(await page.evaluate(() => window.fakeSettings.rememberWindow === true),
+    "remember-window toggle is persisted");
+  await menuTitle("视图").click();
+  check(await page.locator('[data-cmd="remember-window"]').getAttribute("aria-checked") === "true",
+    "remember-window shows as checked");
+  await page.locator('[data-cmd="remember-window"]').click();
+  await page.waitForFunction(() => window.fakeSettings.rememberWindow === false);
+  check(await page.evaluate(() => window.fakeSettings.rememberWindow === false),
+    "remember-window can be turned back off");
+
+  // 双击窗口框架放大 / 还原（x 落在菜单栏右侧的空白处）
+  await page.locator(".chrome").dblclick({ position: { x: 500, y: 12 } });
+  check(await page.evaluate(() => window.maximizeCalls === 1), "double-clicking the chrome toggles maximize");
+
+  // ── 说明 ──────────────────────────────────────────────────
+  await page.keyboard.press("F1");
+  await page.waitForFunction(() => !document.querySelector("#help-mask").hidden);
+  check(await page.locator("#help-mask").isVisible(), "F1 opens the help dialog");
+  check(await page.locator("#help-engine-table tbody tr").count() === 3, "help lists every engine");
+  const helpNotes = await page.locator("#help-engine-notes").innerText();
+  check(helpNotes.includes("国内直连") && helpNotes.includes("柯林斯") && helpNotes.includes("词源"),
+    "help carries the engine small print that left the toolbar");
+  check((await page.locator("#help-paths-table").innerText()).includes("settings.json"),
+    "help lists the settings file location");
+  check((await page.locator("#help-version").innerText()).includes("0.1.0"), "help shows the app version");
+  await page.keyboard.press("Escape");
+  check(await page.locator("#help-mask").isHidden(), "Escape closes the help dialog");
+
+  await menuTitle("说明").click();
+  await page.locator('[data-cmd="help"][data-arg="about"]').click();
+  await page.waitForFunction(() => !document.querySelector("#help-mask").hidden);
+  check(await page.locator("#help-mask").isVisible(), "the help menu opens the same dialog");
+  await page.locator("#btn-close-help-2").click();
+  check(await page.locator("#help-mask").isHidden(), "the help dialog closes from its footer button");
+
+  // 菜单栏键盘导航
+  await page.locator("#input").focus();
+  await page.keyboard.press("Alt");
+  check(await page.locator(".menu-btn").first().evaluate(el => el === document.activeElement),
+    "Alt focuses the menu bar");
+  await page.keyboard.press("ArrowDown");
+  check(await page.locator('.menu-pop:not([hidden]) .menu-item').first()
+    .evaluate(el => el === document.activeElement), "ArrowDown opens the menu and focuses the first item");
+  await page.keyboard.press("Escape");
+  check(await page.locator(".menu-pop:not([hidden])").count() === 0, "Escape closes the menu bar");
+
+  // 还原成默认外观，后面的布局检查沿用原来的基准
+  await menuTitle("视图").click();
+  await page.locator('[data-cmd="theme"][data-arg="plain"]').click();
+  await page.waitForFunction(() => document.documentElement.dataset.theme === "plain");
+  await menuTitle("视图").click();
+  await page.locator('[data-cmd="font"][data-arg="md"]').click();
+  await page.waitForFunction(() => document.documentElement.dataset.font === "md");
+  check(await page.locator(".spectrum").isHidden(), "switching back to plain hides the decoration again");
+
   // ── 布局 ──────────────────────────────────────────────────
   await page.setViewportSize({ width: 720, height: 480 });
   await page.screenshot({ path: "test-results/compact.png" });
@@ -306,6 +449,20 @@ try {
   check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
     "history drawer does not overflow the narrow viewport");
   await page.locator("#btn-close-history").click();
+
+  // meridian 在最小窗口下也得装得下
+  await menuTitle("视图").click();
+  await page.locator('[data-cmd="theme"][data-arg="meridian"]').click();
+  await page.waitForFunction(() => document.documentElement.dataset.theme === "meridian");
+  // 等 0.12s 的按钮背景过渡走完，否则截图里菜单标题还留着高亮
+  await page.waitForTimeout(250);
+  await page.screenshot({ path: "test-results/meridian-compact.png" });
+  check(await page.evaluate(() => {
+    const bar = document.querySelector(".chrome");
+    const right = document.querySelector(".chrome-right");
+    return bar.getBoundingClientRect().right <= innerWidth + 0.5 &&
+      right.getBoundingClientRect().right <= innerWidth + 0.5;
+  }), "the menu bar stays inside the window at the minimum size");
 
   check(errors.length === 0, `no uncaught UI errors (${errors.join(", ")})`);
 

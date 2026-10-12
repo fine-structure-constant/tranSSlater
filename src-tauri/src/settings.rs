@@ -25,6 +25,16 @@ pub const LANG_PAIRS: &[&str] = &[
 /// 历史库保留策略。目前只有「全部保留」和「不记录」两档。
 pub const HISTORY_MODES: &[&str] = &["all", "off"];
 
+/// 皮肤清单。新增皮肤要同时改 src/theme.css 与 src/settings.ts。
+pub const THEMES: &[&str] = &["plain", "meridian"];
+
+/// 字号档位。具体倍率写在 src/theme.css 的 `[data-font]` 里。
+pub const FONT_SCALES: &[&str] = &["sm", "md", "lg", "xl"];
+
+/// 窗口尺寸边界，与 tauri.conf.json 的 minWidth / minHeight 对齐。
+pub const WINDOW_MIN: (f64, f64) = (720.0, 480.0);
+pub const WINDOW_MAX: (f64, f64) = (3840.0, 2160.0);
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
@@ -36,6 +46,16 @@ pub struct Settings {
     pub engine: String,
     /// 是否记录历史：`all`（默认，无上限）或 `off`
     pub history_mode: String,
+    /// 界面皮肤 id，对应 `<html data-theme>`
+    pub theme: String,
+    /// 字号档位，对应 `<html data-font>`
+    pub font: String,
+    /// 启动时的窗口宽度（逻辑像素）
+    pub window_width: f64,
+    /// 启动时的窗口高度（逻辑像素）
+    pub window_height: f64,
+    /// 是否在用户手动缩放窗口后覆盖上面的默认尺寸
+    pub remember_window: bool,
 }
 
 impl Default for Settings {
@@ -47,6 +67,11 @@ impl Default for Settings {
             lang_pair: "auto|zh-CN".into(),
             engine: "google".into(),
             history_mode: "all".into(),
+            theme: "plain".into(),
+            font: "md".into(),
+            window_width: 1020.0,
+            window_height: 760.0,
+            remember_window: false,
         }
     }
 }
@@ -67,7 +92,34 @@ impl Settings {
         if !HISTORY_MODES.contains(&self.history_mode.as_str()) {
             return Err(TranslateError::Invalid("不支持的历史记录策略".into()));
         }
+        if !THEMES.contains(&self.theme.as_str()) {
+            return Err(TranslateError::Invalid(format!("不支持的皮肤：{}", self.theme)));
+        }
+        if !FONT_SCALES.contains(&self.font.as_str()) {
+            return Err(TranslateError::Invalid(format!("不支持的字号：{}", self.font)));
+        }
+        if !self.window_size_in_range() {
+            return Err(TranslateError::Invalid(format!(
+                "窗口尺寸超出允许范围（{}×{} 到 {}×{}）",
+                WINDOW_MIN.0, WINDOW_MIN.1, WINDOW_MAX.0, WINDOW_MAX.1
+            )));
+        }
         Ok(())
+    }
+
+    fn window_size_in_range(&self) -> bool {
+        let ok = |v: f64, min: f64, max: f64| v.is_finite() && (min..=max).contains(&v);
+        ok(self.window_width, WINDOW_MIN.0, WINDOW_MAX.0)
+            && ok(self.window_height, WINDOW_MIN.1, WINDOW_MAX.1)
+    }
+
+    /// 启动时用的窗口尺寸（逻辑像素）。越界时收敛到边界，宁可开小也不要开在屏幕外。
+    pub fn window_size(&self) -> (f64, f64) {
+        let clamp = |v: f64, min: f64, max: f64| if v.is_finite() { v.clamp(min, max) } else { min };
+        (
+            clamp(self.window_width, WINDOW_MIN.0, WINDOW_MAX.0),
+            clamp(self.window_height, WINDOW_MIN.1, WINDOW_MAX.1),
+        )
     }
 }
 
@@ -114,6 +166,10 @@ mod tests {
         assert_eq!(s.engine, "google");
         assert_eq!(s.history_mode, "all");
         assert!(s.auto_translate);
+        assert_eq!(s.theme, "plain");
+        assert_eq!(s.font, "md");
+        assert_eq!(s.window_size(), (1020.0, 760.0));
+        assert!(!s.remember_window);
         assert!(s.validate(&engines()).is_ok());
         assert!(
             Settings {
@@ -143,7 +199,41 @@ mod tests {
         assert!(
             Settings {
                 history_mode: "some".into(),
-                ..s
+                ..s.clone()
+            }
+            .validate(&engines())
+            .is_err()
+        );
+        assert!(
+            Settings {
+                theme: "neon".into(),
+                ..s.clone()
+            }
+            .validate(&engines())
+            .is_err(),
+            "未登记的皮肤要拒绝，否则界面会退回没有令牌的裸样式"
+        );
+        assert!(
+            Settings {
+                font: "huge".into(),
+                ..s.clone()
+            }
+            .validate(&engines())
+            .is_err()
+        );
+        assert!(
+            Settings {
+                window_width: 200.0,
+                ..s.clone()
+            }
+            .validate(&engines())
+            .is_err(),
+            "窗口比最小尺寸还窄会导致布局挤成一团"
+        );
+        assert!(
+            Settings {
+                window_height: 10_000.0,
+                ..s.clone()
             }
             .validate(&engines())
             .is_err()
@@ -151,13 +241,39 @@ mod tests {
     }
 
     #[test]
+    fn window_size_clamps_instead_of_panicking() {
+        let s = Settings {
+            window_width: -5.0,
+            window_height: f64::NAN,
+            ..Settings::default()
+        };
+        assert_eq!(s.window_size(), WINDOW_MIN);
+    }
+
+    #[test]
+    fn every_registered_theme_and_font_passes_validation() {
+        for theme in THEMES {
+            for font in FONT_SCALES {
+                let s = Settings {
+                    theme: (*theme).into(),
+                    font: (*font).into(),
+                    ..Settings::default()
+                };
+                assert!(s.validate(&engines()).is_ok(), "{theme}/{font} 应被接受");
+            }
+        }
+    }
+
+    #[test]
     fn old_settings_file_without_new_fields_still_loads() {
-        // 兼容旧版本写下的 settings.json：缺 engine / historyMode 时用默认值
+        // 兼容旧版本写下的 settings.json：缺 engine / historyMode / theme 等字段时用默认值
         let s: Settings =
             serde_json::from_str(r#"{"proxy":"","autoTranslate":true,"autoSpeak":false,"langPair":"en|zh-CN"}"#)
                 .unwrap();
         assert_eq!(s.engine, "google");
         assert_eq!(s.history_mode, "all");
+        assert_eq!(s.theme, "plain");
+        assert_eq!(s.font, "md");
         assert!(s.validate(&engines()).is_ok());
     }
 
@@ -169,10 +285,19 @@ mod tests {
         let mut s = load(&path, &engines()).unwrap();
         s.auto_speak = true;
         s.engine = "youdao".into();
+        s.theme = "meridian".into();
+        s.font = "lg".into();
+        s.window_width = 1280.0;
+        s.window_height = 820.0;
+        s.remember_window = true;
         save(&path, &s, &engines()).unwrap();
         let reloaded = load(&path, &engines()).unwrap();
         assert!(reloaded.auto_speak);
         assert_eq!(reloaded.engine, "youdao");
+        assert_eq!(reloaded.theme, "meridian");
+        assert_eq!(reloaded.font, "lg");
+        assert_eq!(reloaded.window_size(), (1280.0, 820.0));
+        assert!(reloaded.remember_window);
         s.proxy = "invalid".into();
         assert!(save(&path, &s, &engines()).is_err());
         assert_eq!(load(&path, &engines()).unwrap().proxy, "");

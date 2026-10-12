@@ -54,6 +54,39 @@ export function clearCache(): Promise<void> {
   return invoke<void>("clear_cache");
 }
 
+// ── 窗口与应用信息 ──────────────────────────────────────────
+
+export interface AppInfo {
+  version: string;
+  settingsPath: string;
+  historyPath: string;
+  configDir: string;
+  dataDir: string;
+}
+
+/** 把主窗口调整到给定的逻辑尺寸。浏览器预览下无事发生。 */
+export function resizeWindow(width: number, height: number): Promise<void> {
+  if (!isTauri()) return Promise.resolve();
+  return invoke<void>("resize_window", { width, height });
+}
+
+/** 放大 / 还原窗口，返回调整后是否处于最大化。 */
+export function toggleMaximize(): Promise<boolean> {
+  if (!isTauri()) return Promise.resolve(false);
+  return invoke<boolean>("toggle_maximize");
+}
+
+/** 版本号与数据文件位置。浏览器预览下给出占位值。 */
+export function appInfo(): Promise<AppInfo | null> {
+  if (!isTauri()) return Promise.resolve(null);
+  return invoke<AppInfo>("app_info");
+}
+
+export function quitApp(): Promise<void> {
+  if (!isTauri()) return Promise.reject(desktopOnly);
+  return invoke<void>("quit_app");
+}
+
 // ── 历史 ────────────────────────────────────────────────────
 
 export function historyList(
