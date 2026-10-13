@@ -1,6 +1,8 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Translater 实现与验证</title><style>body{font:16px/1.7 system-ui,sans-serif;color:#242830;max-width:1000px;margin:40px auto;padding:0 24px}table{border-collapse:collapse;width:100%;display:block;overflow-x:auto}th,td{padding:12px;text-align:left;border-bottom:1px solid #ddd}a{color:#245bb8}code{background:#f3f4f6;padding:2px 5px}img{max-width:100%;border:1px solid #ddd}h2{margin-top:2em}</style></head><body>
 <h1>Translater 实现与验证</h1>
+<p><b>最新方向：</b>依用户最新要求收敛为底部四点、单波，缩小单词与 emoji，保留旋转和重叠。最多 232 个粒子，使用位图缓存、分辨率预算及离屏跳过优化绘制。132 项界面检查通过；同场景浏览器 A/B 中位图版帧间隔中位数约 16.7ms、P95 约 17ms。正式 <a href="../artifacts/Translater.exe">Translater.exe</a> 已构建。<a href="feature/word-confetti.html">查看当前实现、截图和性能证据</a>。上一版满窗三波保留为 <a href="../artifacts/Translater-party.exe">Translater-party.exe</a>。</p>
+<p><b>2026-10-13 更新：</b>当前项目已有 Git（基线 ae1fd3d）、三个翻译引擎、SQLite 历史、多主题与菜单栏。以下 10-11 记录作为历史证据保留。新需求 REQ-003：增加历史单词与 emoji 礼炮，<a href="feature/word-confetti.html">查看功能与验证记录</a>。状态：verified；42 项 Rust 测试、126 项界面检查通过，正式 EXE 已更新并独立运行，原生窗口已观察到真实历史词汇礼炮。</p>
 <p>2026-10-11 · Windows / Tauri 2 + Rust + TypeScript · 最终状态：verified。当前目录没有 Git 元数据，保留既有项目结构。下一步：直接运行 <a href="../artifacts/Translater.exe">Translater.exe</a>。</p>
 <h2>用户需求与约束</h2>
 <table><tr><th>编号</th><th>需求与验收</th><th>状态</th></tr><tr><td>REQ-001</td><td>用户要求：修复运行失败，实现桌面翻译器。验收：编译成功，桌面窗口可打开，真实翻译可用。</td><td>requested / verified</td></tr><tr><td>REQ-002</td><td>实现推断：保留 Google 翻译、词典、缓存、代理、自动翻译、朗读与中文界面。</td><td>implemented；语音人工验证仍待进行</td></tr></table>

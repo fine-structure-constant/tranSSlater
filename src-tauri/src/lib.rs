@@ -294,6 +294,17 @@ fn history_list(
 }
 
 #[tauri::command]
+fn history_celebration_words(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<String>, TranslateError> {
+    state
+        .history
+        .lock()
+        .expect("history 锁中毒")
+        .celebration_words()
+}
+
+#[tauri::command]
 fn history_get(
     state: tauri::State<'_, AppState>,
     id: i64,
@@ -362,6 +373,7 @@ pub fn run() {
             load_settings,
             save_settings,
             history_list,
+            history_celebration_words,
             history_get,
             history_delete,
             history_clear,

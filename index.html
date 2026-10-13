@@ -6,6 +6,7 @@
     <link rel="stylesheet" href="/src/theme.css" />
     <link rel="stylesheet" href="/src/styles.css" />
     <link rel="stylesheet" href="/src/panels.css" />
+    <link rel="stylesheet" href="/src/confetti.css" />
     <title>Translater</title>
     <script type="module" src="/src/main.ts" defer></script>
   </head>
@@ -149,6 +150,14 @@
           </button>
           <button id="btn-history" class="ghost-btn" title="翻译历史 (Ctrl+H)">
             历史 <span id="history-count">0</span>
+          </button>
+          <button id="btn-celebrate" class="ghost-btn celebration-button" type="button" title="把查过的单词放成礼炮" aria-label="单词礼炮">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m4 20 4-12 8 8-12 4Z" />
+              <path d="m7 11 6 6M13 3l1 3M18 7l3-1M17 12l3 1M10 5l1-2M17 3l-1 4" />
+              <circle cx="20" cy="3" r=".6" fill="currentColor" stroke="none" />
+            </svg>
+            <span>礼炮</span>
           </button>
           <button id="btn-settings" class="icon-btn" title="设置">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">

@@ -103,6 +103,12 @@ export function historyGet(id: number): Promise<TranslateResult | null> {
   return invoke<TranslateResult | null>("history_get", { id });
 }
 
+/** 单词礼炮的只读词池，独立于历史抽屉的搜索与分页。 */
+export function historyCelebrationWords(): Promise<string[]> {
+  if (!isTauri()) return Promise.resolve([]);
+  return invoke<string[]>("history_celebration_words");
+}
+
 export function historyDelete(id: number): Promise<boolean> {
   if (!isTauri()) return Promise.reject(desktopOnly);
   return invoke<boolean>("history_delete", { id });

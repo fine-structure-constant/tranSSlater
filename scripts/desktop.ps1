@@ -1,7 +1,9 @@
 param(
     [ValidateSet('dev', 'build', 'test', 'check', 'smoke')]
     [string]$Action = 'dev',
-    [switch]$NoBundle
+    [switch]$NoBundle,
+    [ValidatePattern('^[A-Za-z0-9_-]+\.exe$')]
+    [string]$ArtifactName = 'Translater.exe'
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
@@ -66,8 +68,8 @@ try {
         Write-Host "Installers: $targetDir\release\bundle"
         $artifactDir = Join-Path $projectRoot 'artifacts'
         New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
-        Copy-Item -LiteralPath (Join-Path $targetDir 'release\translater.exe') -Destination (Join-Path $artifactDir 'Translater.exe') -Force
-        Write-Host "Ready to run: $artifactDir\Translater.exe"
+        Copy-Item -LiteralPath (Join-Path $targetDir 'release\translater.exe') -Destination (Join-Path $artifactDir $ArtifactName) -Force
+        Write-Host "Ready to run: $artifactDir\$ArtifactName"
     }
     exit 0
 } catch {

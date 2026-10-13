@@ -1,0 +1,21 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>单词礼炮 · Translater</title><style>body{font:16px/1.7 system-ui,sans-serif;max-width:960px;margin:40px auto;padding:0 24px;color:#242830}a{color:#245bb8}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px;border-bottom:1px solid #ddd}img{max-width:100%}</style></head><body>
+<p><a href="../index.html">返回实现记录</a></p><h1>为查过的单词放个礼炮</h1>
+<p><b>当前要求（accepted）：</b>底部四个发射点同时放出一波，单词 22–40px、emoji 30–54px（随字号设置缩放），保留旋转与重叠。最多 232 个粒子，自然落出窗口，最长约 3.6 秒，全部离屏后提前结束。状态：verified；正式优化构建成功，当前程序为 <a href="../../artifacts/Translater.exe">Translater.exe</a>。</p>
+<h2>本次实现与验证</h2>
+<p><a href="../../src/confetti.ts">动画模块</a>将文字与 emoji 预绘为位图，每帧只贴图；缓存按文本、主题、字号及分辨率区分，最多 96 张 / 约 8 MB 像素。画布 DPR 上限 1.5，限制像素预算，跳过离屏粒子。132 项界面回归检查全部通过，覆盖四个底部原点、仅一波、尺寸、逐帧无文字绘制及原有清理和失败恢复行为。前端类型检查和生产构建通过；本次未改动后端，未重跑 Rust 测试。</p>
+<table><tr><th>同场景浏览器 A/B</th><th>典型帧间隔（首次 / 再次）</th><th>P95 帧间隔</th><th>逐帧文字绘制</th></tr><tr><td>每帧绘制文字的对照</td><td>266.6 / 233.3 ms</td><td>333.4 / 316.6 ms</td><td>1382 / 1565 次</td></tr><tr><td>位图缓存版</td><td>16.7 / 16.7 ms</td><td>17.0 / 17.0 ms</td><td>0 / 0 次</td></tr></table>
+<p>测试环境：Windows / Edge headless，1020 × 760、DPR 1.5，模拟 IPC 与固定随机种子，两组使用相同粒子和轨迹；只统计实际绘制帧。浏览器结果不代表原生 WebView 帧率保证。<a href="../../scripts/benchmark-confetti.mjs">复现脚本</a>、<a href="../../test-results/confetti-control.json">对照数据</a>、<a href="../../test-results/confetti-after.json">优化数据</a>。两个主题的实际渲染截图已复核，字号在四个发射点均匀分布。</p>
+<h2>此前版本记录</h2>
+<p><b>满窗强度版本（已被当前要求替代）：</b>字号约 24–72px、约 406 个粒子，四边/中央/满窗散点分三波发射。保留在 <a href="../../artifacts/Translater-party.exe">Translater-party.exe</a> 供比较。以下是最初版本的实现记录；当前行为以上方最新记录为准。</p>
+<p>2026-10-13 · 基线 ae1fd3d · 工作区初始无未提交改动。</p>
+<h2>REQ-003 · 用户要求（accepted）</h2><p>先在 Codex 放一次礼炮；阅读项目当前改动；在 Translater 增加礼炮按钮，点击把历史中查过的单词和 emoji 炸出，参考 Codex 礼炮，为学习提供情绪价值。Codex 礼炮已成功触发。</p>
+<h2>实现方向</h2><p>让用户看见自己积累的词汇变成一场庆祝。保留 plain / meridian、字号、菜单、引擎和历史库结构；新增与现有按钮一致的 SVG 礼炮按钮，位于历史旁。用户已选定这一交互方向；布局、粒子数量等为代理实现选择，不作为额外用户决定。</p>
+<table><tr><th>状态</th><th>行为</th></tr><tr><td>有历史单词</td><td>只读查询最近最多 128 个不重复的短词条，随机选取，混合彩纸和 emoji，从两侧发射后自然落下，约 3.6 秒结束。</td></tr><tr><td>空历史 / 只有整句</td><td>播放彩纸和 emoji，不伪造学过的单词。</td></tr><tr><td>减少动态效果</td><td>显示静态词汇庆祝卡片；不做飞行或旋转。</td></tr><tr><td>连续点击 / 隐藏 / 缩放 / Escape</td><td>不堆叠动画或历史读取；重新播放时清理上次效果，隐藏页面、缩放和 Escape 时清理资源。</td></tr><tr><td>读取失败</td><td>仍能放出 emoji，同时显示可读提示；后续点击可重试。</td></tr></table>
+<h2>技术与预算</h2><p>单独的 Canvas 动画模块，最多约 140 个粒子，DPR 上限 2；无新增依赖、无声音、无网络请求、无历史写入。每次点击读取词池，避免删除的历史长期残留。图层不接收指针事件、不抢焦点；按钮支持键盘，独立 live region 提供庆祝反馈。令牌取自当前主题，字体随字号档位。</p>
+<h2>实现与验证</h2><table><tr><th>映射</th><th>实现</th><th>证据 / 状态</th></tr><tr><td>REQ-003 / IMP-005</td><td><a href="../../src/confetti.ts">动画模块</a>、<a href="../../src/confetti.css">主题与反馈样式</a>、<a href="../../index.html">按钮</a></td><td>verified：126 项界面回归全部通过，新增 18 项礼炮检查。</td></tr><tr><td>REQ-003 / IMP-006</td><td><a href="../../src-tauri/src/history.rs">短词池只读查询与索引</a>、<a href="../../src-tauri/src/lib.rs">桌面命令</a></td><td>verified：42 项 Rust 测试通过，包括去重、整句/长词过滤、跨 600 条整句取词、删除后不残留和 128 条上限。</td></tr><tr><td>REQ-003 / IMP-007</td><td><a href="../../artifacts/Translater.exe">新版 EXE</a></td><td>verified：正式优化构建成功（7,532,544 字节）；Vite 已关闭，独立启动于 tauri.localhost。原生窗口截图确认真实历史词汇、emoji 与彩纸同时出现，历史条数保持 18。</td></tr></table>
+<p>前端类型检查及生产构建：passed；空历史、失败后恢复、双击合并读取、页面隐藏取消、自动清理、Escape、缩放、键盘触发、静态词束及两个主题：passed。没有新依赖或网络请求。8 项已有网络集成测试本次未运行（此功能不改变翻译引擎）。</p>
+<h2>实现截图</h2><p>下列截图使用真实 UI 与模拟 IPC；历史单词为测试数据，不能视为实际数据库内容。</p>
+<figure><img src="../../test-results/confetti-meridian.png" alt="远点主题下，底部四点单波单词礼炮"><figcaption>当前实现 · meridian · 模拟 IPC · 截取实际 Canvas 帧后固定画面用于截图</figcaption></figure>
+<figure><img src="../../test-results/confetti-plain.png" alt="简约主题下，底部四点单波单词礼炮"><figcaption>当前实现 · plain · 模拟 IPC</figcaption></figure>
+<figure><img src="../../test-results/confetti-reduced.png" alt="减少动态效果下的静态词汇庆祝卡片"><figcaption>implementation capture · 720 × 480 · reduced motion · 模拟 IPC</figcaption></figure>
+<h2>边界</h2><p>只使用引擎标记为词条的查询，限制 32 个字符以保持可读；不展示整句历史。首次没有词条时仅使用 emoji。没有未完成的功能或阻塞项。系统减少动态效果的路径通过浏览器仿真验证，未改动用户系统设置。</p><h2>变更记录</h2><p>2026-10-13：阅读 ae1fd3d 现有实现；增加独立词池查询、SVG 按钮、双侧 Canvas 礼炮、静态词束与回收机制；补齐两项数据库测试及十八项界面检查。撤回格式化工具对无关 Rust 文件的格式改动，未修改其他功能。</p></body></html>

@@ -33,6 +33,55 @@ try {
     window.resizedTo = null;
     window.maximizeCalls = 0;
     window.quitCalled = false;
+    window.fakeCelebrationWords = ["coercion", "hello", "好奇心"];
+    window.confettiFailure = false;
+    window.confettiDelay = 0;
+    window.drawnConfetti = new Set();
+    window.confettiSamples = [];
+    window.confettiFrameTextCount = 0;
+    window.peakConfettiTextCount = 0;
+    window.liveConfettiTextCalls = 0;
+    window.confettiFirstFrame = null;
+    window.confettiFrameCounts = [];
+    const spriteText = new WeakMap();
+    const originalRaf = window.requestAnimationFrame.bind(window);
+    window.requestAnimationFrame = callback => {
+      const scheduledAt = performance.now();
+      return originalRaf(time => {
+        window.confettiFrameTextCount = 0;
+        // 原点检查固定在第一帧，避免机器忙时首帧已飞出几十像素。
+        const firstLaunch = !window.confettiFirstFrame && document.querySelector("#word-confetti");
+        callback(firstLaunch ? scheduledAt : time);
+        window.peakConfettiTextCount = Math.max(window.peakConfettiTextCount, window.confettiFrameTextCount);
+        if (window.confettiFrameTextCount) {
+          window.confettiFrameCounts.push(window.confettiFrameTextCount);
+          if (!window.confettiFirstFrame) window.confettiFirstFrame = window.confettiSamples.slice(0, window.confettiFrameTextCount);
+        }
+      });
+    };
+    const originalFillText = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function(text, ...args) {
+      if (this.canvas.id === "word-confetti") window.liveConfettiTextCalls++;
+      else spriteText.set(this.canvas, { text, size: Number(this.font.match(/([\d.]+)px/)?.[1] ?? 0) });
+      return originalFillText.call(this, text, ...args);
+    };
+    const originalStrokeText = CanvasRenderingContext2D.prototype.strokeText;
+    CanvasRenderingContext2D.prototype.strokeText = function(...args) {
+      if (this.canvas.id === "word-confetti") window.liveConfettiTextCalls++;
+      return originalStrokeText.apply(this, args);
+    };
+    const originalDrawImage = CanvasRenderingContext2D.prototype.drawImage;
+    CanvasRenderingContext2D.prototype.drawImage = function(source, ...args) {
+      const info = spriteText.get(source);
+      if (this.canvas.id === "word-confetti" && info) {
+        window.drawnConfetti.add(info.text);
+        window.confettiFrameTextCount++;
+        const transform = this.getTransform();
+        const dpr = this.canvas.width / innerWidth;
+        if (window.confettiSamples.length < 6000) window.confettiSamples.push({ ...info, x: transform.e / dpr, y: transform.f / dpr });
+      }
+      return originalDrawImage.call(this, source, ...args);
+    };
     const cache = new Set();
     const engines = [
       { id: "google", name: "Google 翻译", note: "大陆需代理", needsProxy: true, supportsSentence: true, supportsDictionary: true, supportsAudio: false },
@@ -61,6 +110,11 @@ try {
         dataDir: "C:\\Users\\test\\AppData\\Roaming\\com.tauri-app.translater",
       };
       if (cmd === "history_stats") return { total: window.fakeHistory.length, sizeBytes: 20480 };
+      if (cmd === "history_celebration_words") {
+        await new Promise(resolve => setTimeout(resolve, window.confettiDelay));
+        if (window.confettiFailure) throw "history read failed";
+        return window.fakeCelebrationWords;
+      }
       if (cmd === "history_list") {
         const filter = args.filter ?? "";
         const items = window.fakeHistory.filter(
@@ -463,6 +517,126 @@ try {
     return bar.getBoundingClientRect().right <= innerWidth + 0.5 &&
       right.getBoundingClientRect().right <= innerWidth + 0.5;
   }), "the menu bar stays inside the window at the minimum size");
+
+  // ── 单词礼炮：真正绘制本地词与 emoji，不触碰翻译与历史写入 ─────
+  await page.setViewportSize({ width: 1020, height: 760 });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  const celebrate = page.getByRole("button", { name: "单词礼炮", exact: true });
+  check(await celebrate.isVisible(), "word confetti button is visible beside history");
+  const queryBefore = await page.locator("#input").inputValue();
+  const commandsBefore = await page.evaluate(() => window.calls.length);
+  await celebrate.click();
+  await page.waitForFunction(() => window.drawnConfetti.has("coercion") && window.drawnConfetti.has("好奇心") && window.drawnConfetti.has("🎉"));
+  await page.waitForFunction(() => window.peakConfettiTextCount >= 80);
+  await page.waitForTimeout(600);
+  // 一次读取同一帧附近的状态，避免跨多次 IPC 时动画已自然结束。
+  const storm = await page.evaluate(({ queryBefore, commandsBefore }) => {
+    const canvas = document.querySelector("#word-confetti");
+    // 固定这一帧的位图用于截图；检查的仍是实际正在运行的 Canvas。
+    // 避免截图工具等待字体时，3.6 秒的礼炮已经自动结束。
+    if (canvas) {
+      const capture = document.createElement("img");
+      capture.id = "confetti-capture-frame";
+      capture.className = "word-confetti";
+      capture.setAttribute("aria-hidden", "true");
+      capture.src = canvas.toDataURL();
+      capture.style.zIndex = "82";
+      document.body.append(capture);
+    }
+    const cells = new Set(window.confettiSamples.filter(p => p.x >= 0 && p.x < innerWidth && p.y >= 0 && p.y < innerHeight)
+      .map(p => `${Math.floor(p.x / innerWidth * 4)},${Math.floor(p.y / innerHeight * 3)}`));
+    return {
+      singleCanvas: document.querySelectorAll("#word-confetti").length === 1,
+      dense: window.peakConfettiTextCount >= 80 && window.peakConfettiTextCount <= 104,
+      sized: window.confettiSamples.filter(p => window.fakeCelebrationWords.includes(p.text)).every(p => p.size <= 40),
+      spread: cells.size >= 6,
+      cached: window.liveConfettiTextCalls === 0,
+      fourBottomOrigins: window.confettiFirstFrame?.every(p => p.y > innerHeight * 0.7 && [0.1, 0.36, 0.64, 0.9].some(anchor => Math.abs(p.x / innerWidth - anchor) < 0.045)),
+      singleWave: window.confettiFrameCounts.every(n => n <= window.confettiFrameCounts[0]),
+      pointerThrough: !!canvas && getComputedStyle(canvas).pointerEvents === "none",
+      focus: document.activeElement === document.querySelector("#btn-celebrate"),
+      input: document.querySelector("#input").value === queryBefore,
+      readOnly: window.calls.slice(commandsBefore).every(c => c.cmd === "history_celebration_words"),
+    };
+  }, { queryBefore, commandsBefore });
+  check(storm.singleCanvas, "confetti draws history words and emoji on one canvas");
+  check(storm.dense, "single burst has a bounded, overlapping group of word and emoji sprites");
+  check(storm.sized, "word sprites use the smaller size range");
+  check(storm.spread, "bottom burst spreads upward through the window");
+  check(storm.cached, "animation never lays out or strokes live text in its frames");
+  check(storm.fourBottomOrigins, "all sprites launch from the four bottom positions");
+  check(storm.singleWave, "no second wave appears after the initial burst");
+  check(storm.pointerThrough, "confetti cannot intercept pointer input");
+  check(storm.focus, "celebrating does not steal keyboard focus");
+  check(storm.input, "celebration preserves translation input");
+  check(storm.readOnly, "celebration only reads its local word pool");
+  await page.locator("#confetti-capture-frame").evaluate(img => img.decode());
+  await page.screenshot({ path: "test-results/confetti-meridian.png" });
+  await page.locator("#confetti-capture-frame").evaluate(img => img.remove());
+  await celebrate.click();
+  await page.waitForFunction(() => !document.querySelector("#btn-celebrate").hasAttribute("aria-busy"));
+  check(await page.locator("#word-confetti").count() === 1, "repeated celebrations replace the previous canvas");
+  await page.waitForFunction(() => !document.querySelector("#word-confetti"), null, { timeout: 5000 });
+  check(await page.locator("#celebration-feedback").innerText() === "", "finished celebration removes canvas and feedback");
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await celebrate.focus();
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => document.querySelector(".celebration-bouquet"));
+  check(await page.locator("#word-confetti").count() === 0, "reduced motion uses a static bouquet instead of flying particles");
+  check((await page.locator("#celebration-feedback").innerText()).includes("好奇心"), "keyboard-triggered static celebration includes actual history words");
+  await page.setViewportSize({ width: 720, height: 480 });
+  await celebrate.click();
+  await page.waitForFunction(() => document.querySelector(".celebration-bouquet"));
+  await page.screenshot({ path: "test-results/confetti-reduced.png" });
+  check(await celebrate.evaluate(el => el.getBoundingClientRect().right <= innerWidth), "confetti button fits the compact window");
+  await page.keyboard.press("Escape");
+  check(await page.locator("#celebration-feedback").innerText() === "", "Escape dismisses the celebration");
+
+  await page.evaluate(() => { window.fakeCelebrationWords = []; });
+  await celebrate.click();
+  await page.waitForFunction(() => document.querySelector("#celebration-feedback").textContent.includes("好奇心"));
+  check(await page.locator(".celebration-word").allTextContents().then(words => words.length === 3 && words.includes("🎉")),
+    "empty history celebrates with emoji without inventing learned words");
+  await page.keyboard.press("Escape");
+  await page.evaluate(() => { window.confettiFailure = true; });
+  await celebrate.click();
+  await page.waitForFunction(() => document.querySelector("#celebration-feedback").textContent.includes("读取失败"));
+  check(await page.locator(".celebration-bouquet").isVisible(), "history failure still offers emoji with a readable explanation");
+  await page.evaluate(() => { window.confettiFailure = false; window.fakeCelebrationWords = ["fresh-word"]; });
+  await celebrate.click();
+  await page.waitForFunction(() => document.querySelector("#celebration-feedback").textContent.includes("fresh-word"));
+  check(!(await page.locator("#celebration-feedback").innerText()).includes("coercion"), "retry uses fresh history rather than retaining deleted words");
+  await page.keyboard.press("Escape");
+
+  // 双击只发一次请求；页面隐藏会让未完成的读取失效。
+  await page.evaluate(() => { window.confettiDelay = 300; });
+  const readsBefore = await page.evaluate(() => window.calls.filter(c => c.cmd === "history_celebration_words").length);
+  await celebrate.dblclick();
+  await page.waitForFunction(() => document.querySelector(".celebration-bouquet"));
+  check(await page.evaluate(start => window.calls.filter(c => c.cmd === "history_celebration_words").length === start + 1, readsBefore),
+    "double-click coalesces the pending history read");
+  await page.keyboard.press("Escape");
+  await celebrate.click();
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await page.waitForTimeout(400);
+  check(await page.locator("#celebration-feedback").innerText() === "", "hidden page cancels a pending celebration");
+  await page.evaluate(() => { delete document.hidden; window.confettiDelay = 0; });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await menuTitle("视图").click();
+  await page.locator('[data-cmd="theme"][data-arg="plain"]').click();
+  await page.setViewportSize({ width: 1020, height: 760 });
+  await page.evaluate(() => { window.fakeCelebrationWords = ["coercion", "hello", "好奇心", "curiosity", "discover", "serendipity"]; });
+  await celebrate.click();
+  await page.waitForFunction(() => document.querySelector("#word-confetti"));
+  await page.waitForTimeout(650);
+  await page.screenshot({ path: "test-results/confetti-plain.png" });
+  await page.setViewportSize({ width: 720, height: 480 });
+  await page.waitForFunction(() => !document.querySelector("#word-confetti"), null, { polling: 10, timeout: 1000 });
+  check(await page.locator("#word-confetti").count() === 0, "window resize cleans up active particles");
 
   check(errors.length === 0, `no uncaught UI errors (${errors.join(", ")})`);
 

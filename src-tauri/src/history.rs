@@ -96,7 +96,9 @@ impl HistoryStore {
                created_at  INTEGER NOT NULL
              );
              CREATE INDEX IF NOT EXISTS idx_history_created ON history(created_at DESC, id DESC);
-             CREATE INDEX IF NOT EXISTS idx_history_query   ON history(query);",
+             CREATE INDEX IF NOT EXISTS idx_history_query   ON history(query);
+             CREATE INDEX IF NOT EXISTS idx_history_words
+               ON history(created_at DESC, id DESC) WHERE is_word = 1;",
         )?;
         Ok(store)
     }
@@ -179,6 +181,30 @@ impl HistoryStore {
         .map_err(|e| TranslateError::History(e.to_string()))?;
 
         rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|e| TranslateError::History(e.to_string()))
+    }
+
+    /// 礼炮词池：从词条历史单独取样，不受抽屉分页、搜索或引擎影响。
+    /// 只读短词条，去重并限制返回数量，不加载完整翻译 payload。
+    pub fn celebration_words(&self) -> Result<Vec<String>, TranslateError> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT DISTINCT trim(query) COLLATE NOCASE AS word
+               FROM history
+              WHERE is_word = 1
+                AND length(trim(query)) BETWEEN 1 AND 32
+                AND instr(query, char(10)) = 0
+                AND instr(query, char(13)) = 0
+                AND instr(query, char(9)) = 0
+              ORDER BY created_at DESC, id DESC
+              LIMIT 128",
+            )
+            .map_err(|e| TranslateError::History(e.to_string()))?;
+        let rows = stmt
+            .query_map([], |row| row.get(0))
+            .map_err(|e| TranslateError::History(e.to_string()))?;
+        rows.collect::<rusqlite::Result<Vec<String>>>()
             .map_err(|e| TranslateError::History(e.to_string()))
     }
 
@@ -397,6 +423,48 @@ mod tests {
         assert_eq!(s.count(None).unwrap(), 0);
         let id = s.add(&sample("c", "丙"), 3).unwrap();
         assert_eq!(id, 1, "清空后自增 id 应重新从 1 开始");
+    }
+
+    #[test]
+    fn celebration_uses_unique_short_words_across_history_pages() {
+        let s = store();
+        let mut word = sample(" Hello ", "你好");
+        word.is_word = true;
+        s.add(&word, 1).unwrap();
+        word.query = "hello".into();
+        s.add(&word, 2).unwrap();
+        word.query = "好奇心".into();
+        s.add(&word, 3).unwrap();
+        for query in [" ", "two\nlines", "with\ttab", &"x".repeat(33)] {
+            word.query = query.into();
+            s.add(&word, 4).unwrap();
+        }
+        // 最近一页全是整句，也不能漏掉更早查过的词。
+        for i in 0..600 {
+            s.add(&sample(&format!("This is sentence {i}."), "整句"), i + 10)
+                .unwrap();
+        }
+        let words = s.celebration_words().unwrap();
+        assert_eq!(words, vec!["好奇心", "hello"]);
+        assert_eq!(s.count(None).unwrap(), 607, "礼炮不能修改历史");
+        s.delete(3).unwrap();
+        assert_eq!(s.celebration_words().unwrap(), vec!["hello"]);
+        s.clear().unwrap();
+        assert!(s.celebration_words().unwrap().is_empty());
+    }
+
+    #[test]
+    fn celebration_pool_is_bounded_and_newest_first() {
+        let s = store();
+        for i in 0..150 {
+            let mut word = sample(&format!("word{i}"), "词");
+            word.is_word = true;
+            s.add(&word, i).unwrap();
+        }
+        let words = s.celebration_words().unwrap();
+        assert_eq!(words.len(), 128);
+        assert_eq!(words.first().unwrap(), "word149");
+        assert_eq!(words.last().unwrap(), "word22");
     }
 
     #[test]

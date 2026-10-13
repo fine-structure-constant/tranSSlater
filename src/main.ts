@@ -7,6 +7,7 @@ import {
   engines as fetchEngines,
   exportHistory,
   historyClear,
+  historyCelebrationWords,
   historyDelete,
   historyGet,
   historyList,
@@ -34,6 +35,7 @@ import {
   type Settings,
 } from "./settings";
 import { renderResult } from "./render";
+import { attachWordConfetti } from "./confetti";
 import type { EngineInfo, ExportFormat, HistorySummary, TranslateResult } from "./types";
 import { langName } from "./types";
 
@@ -79,6 +81,8 @@ const historyMore = $<HTMLButtonElement>("btn-history-more");
 
 const menubar = $("menubar");
 const menus = Array.from(menubar.querySelectorAll<HTMLElement>(".menu"));
+
+attachWordConfetti($<HTMLButtonElement>("btn-celebrate"), historyCelebrationWords);
 
 // ── 设置与运行时状态 ────────────────────────────────────────
 
