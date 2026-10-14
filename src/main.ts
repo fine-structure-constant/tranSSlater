@@ -14,17 +14,21 @@ import {
   historyStats,
   quitApp,
   resizeWindow,
+  shellMenuRegistered,
+  takeStartupText,
   toggleMaximize,
   translate,
   type AppInfo,
 } from "./api";
 import { isTauri } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import {
   DEFAULTS,
   EXPORT_FORMATS,
   FONT_SCALES,
   THEMES,
+  THEME_STORAGE_KEY,
   WINDOW_MIN,
   WINDOW_PRESETS,
   defaultExportName,
@@ -64,6 +68,9 @@ const settingsTheme = $<HTMLSelectElement>("settings-theme");
 const settingsFont = $<HTMLSelectElement>("settings-font");
 const settingsWindow = $<HTMLSelectElement>("settings-window");
 const rememberWindowInput = $<HTMLInputElement>("remember-window");
+const selectTranslateInput = $<HTMLInputElement>("select-translate");
+const clipboardFallbackInput = $<HTMLInputElement>("clipboard-fallback");
+const shellMenuInput = $<HTMLInputElement>("shell-menu");
 const settingsMsg = $("settings-msg");
 
 const helpMask = $("help-mask");
@@ -141,6 +148,12 @@ function fillEngineOptions(): void {
 function applyAppearance(): void {
   document.documentElement.dataset.theme = settings.theme;
   document.documentElement.dataset.font = settings.font;
+  // 划词悬浮图标是另一个窗口，靠 localStorage 兜第一帧的皮肤，避免闪一下默认样式
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, settings.theme);
+  } catch {
+    // 隐私模式下写不进去，不影响主流程
+  }
 }
 
 async function setTheme(theme: string): Promise<void> {
@@ -853,6 +866,9 @@ function openSettings(): void {
   settingsTheme.value = settings.theme;
   settingsFont.value = settings.font;
   rememberWindowInput.checked = settings.rememberWindow;
+  selectTranslateInput.checked = settings.selectTranslate;
+  clipboardFallbackInput.checked = settings.clipboardFallback;
+  shellMenuInput.checked = settings.shellMenu;
   syncWindowOptions(settings.windowWidth, settings.windowHeight);
   settingsMsg.textContent = "";
   settingsMsg.style.color = "";
@@ -888,6 +904,9 @@ $("btn-save-settings").addEventListener("click", async () => {
     windowWidth: Number.isFinite(width) ? width : settings.windowWidth,
     windowHeight: Number.isFinite(height) ? height : settings.windowHeight,
     rememberWindow: rememberWindowInput.checked,
+    selectTranslate: selectTranslateInput.checked,
+    clipboardFallback: clipboardFallbackInput.checked,
+    shellMenu: shellMenuInput.checked,
   };
   const resized =
     next.windowWidth !== settings.windowWidth || next.windowHeight !== settings.windowHeight;
@@ -1093,6 +1112,9 @@ function syncMenuChecks(): void {
     font: settings.font,
     window: windowKey(settings.windowWidth, settings.windowHeight),
     "remember-window": settings.rememberWindow,
+    "select-translate": settings.selectTranslate,
+    "clipboard-fallback": settings.clipboardFallback,
+    "shell-menu": settings.shellMenu,
   };
   for (const item of menubar.querySelectorAll<HTMLButtonElement>(".menu-item")) {
     const cmd = item.dataset.cmd ?? "";
@@ -1234,11 +1256,65 @@ async function runCommand(cmd: string, arg: string): Promise<void> {
     case "remember-window":
       await toggleRememberWindow();
       return;
+    case "select-translate":
+      await toggleSelectTranslate();
+      return;
+    case "clipboard-fallback":
+      await toggleClipboardFallback();
+      return;
+    case "shell-menu":
+      await toggleShellMenu();
+      return;
     case "help":
       openHelp(arg || "all");
       return;
     default:
   }
+}
+
+// ── 划词翻译与资源管理器右键菜单 ────────────────────────────
+
+/**
+ * 这三个开关都落在设置文件里，后端在 `apply_settings` 里做幂等同步：
+ * 划词开关决定鼠标钩子是否处理手势、悬浮图标是否保留；右键菜单开关决定注册表项。
+ */
+async function applyToggle(patch: Partial<Settings>, message: string): Promise<void> {
+  const next: Settings = { ...settings, ...patch };
+  try {
+    await saveSettings(next);
+    settings = next;
+    syncMenuChecks();
+    setStatus(message);
+    window.setTimeout(() => setStatus(""), 1800);
+  } catch (err) {
+    // 保存失败就把菜单勾选退回真实状态，别让界面撒谎
+    syncMenuChecks();
+    showAlert(`设置未保存：${String(err)}`);
+  }
+}
+
+async function toggleSelectTranslate(): Promise<void> {
+  const on = !settings.selectTranslate;
+  await applyToggle(
+    { selectTranslate: on },
+    on ? "划词翻译已开启" : "划词翻译已关闭",
+  );
+}
+
+async function toggleClipboardFallback(): Promise<void> {
+  const on = !settings.clipboardFallback;
+  await applyToggle(
+    { clipboardFallback: on },
+    on ? "剪贴板兜底已开启" : "剪贴板兜底已关闭",
+  );
+}
+
+async function toggleShellMenu(): Promise<void> {
+  const on = !settings.shellMenu;
+  await applyToggle(
+    { shellMenu: on },
+    on ? "资源管理器右键菜单已加入" : "资源管理器右键菜单已移除",
+  );
 }
 
 /** `1280x820` → 立刻改窗口尺寸并记住。 */
@@ -1376,6 +1452,29 @@ document.addEventListener("keydown", (e) => {
 
 // ── 启动 ────────────────────────────────────────────────────
 
+// ── 划词 / 右键菜单把文字送进来 ─────────────────────────────
+
+/**
+ * 外部来源（划词悬浮图标、资源管理器右键菜单）送来的文字统一走这里：
+ * 填进输入框、立即翻译、把窗口提到最前。**不改动任何外部内容**，
+ * 原文只在这里被读取，翻译结果也只出现在本窗口。
+ */
+function translateExternal(text: string): void {
+  const value = text.trim();
+  if (!value) return;
+
+  window.clearTimeout(debounceTimer);
+  seq++;
+  input.value = value;
+  autoGrow();
+  input.setSelectionRange(value.length, value.length);
+  input.focus();
+  hideAlert();
+  void run(value);
+}
+
+// ── 启动 ────────────────────────────────────────────────────
+
 async function boot(): Promise<void> {
   input.disabled = true;
   langPair.disabled = true;
@@ -1421,6 +1520,44 @@ async function boot(): Promise<void> {
   if (!isTauri()) showAlert("浏览器预览模式。运行 dev.bat 或桌面程序后即可翻译。");
   void refreshCache();
   void refreshHistoryStat();
+
+  void initExternalInput();
+}
+
+/**
+ * 接上两条外部输入通道，并把「资源管理器右键菜单」的勾选对齐到注册表真实状态
+ * （用户可能在别处删掉了注册表项，界面不能凭设置文件想当然）。
+ */
+async function initExternalInput(): Promise<void> {
+  if (isTauri()) {
+    try {
+      await listen<string>("translate-selection", (event) => {
+        translateExternal(event.payload ?? "");
+      });
+    } catch (err) {
+      showAlert(`划词通道未接上：${String(err)}`);
+    }
+  }
+
+  // 冷启动时 `--translate-file` 带进来的内容，后端只给一次
+  try {
+    const startup = await takeStartupText();
+    if (startup) translateExternal(startup);
+  } catch {
+    // 浏览器预览下没有这个命令
+  }
+
+  if (!isTauri()) return;
+  try {
+    const registered = await shellMenuRegistered();
+    if (registered !== settings.shellMenu) {
+      settings.shellMenu = registered;
+      syncMenuChecks();
+      shellMenuInput.checked = registered;
+    }
+  } catch {
+    // 非 Windows 或注册表不可读时忽略
+  }
 }
 
 void boot();

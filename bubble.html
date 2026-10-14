@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="plain" data-font="md">
+  <head>
+    <meta charset="UTF-8" />
+    <title>划词翻译</title>
+    <link rel="stylesheet" href="/src/theme.css" />
+    <link rel="stylesheet" href="/src/bubble.css" />
+  </head>
+  <body>
+    <!--
+      这个页面只负责渲染，没有任何交互逻辑：
+      窗口带 WS_EX_NOACTIVATE，鼠标焦点落不到它身上，点击由 Rust 侧的全局鼠标钩子
+      接管（见 src-tauri/src/selection/hook.rs）。
+    -->
+    <div class="bubble" aria-hidden="true">
+      <span class="bubble__word">translate</span>
+      <span class="bubble__spectrum">
+        <i></i><i></i><i></i><i></i>
+      </span>
+    </div>
+    <script type="module" src="/src/bubble.ts"></script>
+  </body>
+</html>

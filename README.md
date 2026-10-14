@@ -1,6 +1,6 @@
 # Translater 桌面翻译器
 
-Windows 桌面应用，使用 Tauri 2、Rust 与 TypeScript。两个可切换的界面皮肤、四档字号、可记住的窗口尺寸、菜单栏，三个可切换的翻译引擎、不限条数的本地历史库、四种格式的学习导出，以及词典释义、同义词、例句与朗读。
+Windows 桌面应用，使用 Tauri 2、Rust 与 TypeScript。两个可切换的界面皮肤、四档字号、可记住的窗口尺寸、菜单栏，三个可切换的翻译引擎、不限条数的本地历史库、四种格式的学习导出，词典释义、同义词、例句与朗读，以及在任意程序里划词取词的悬浮图标与资源管理器右键菜单。
 
 ## 直接运行
 
@@ -33,6 +33,43 @@ Windows 桌面应用，使用 Tauri 2、Rust 与 TypeScript。两个可切换的
 - 窗口尺寸有四个预设（紧凑 900×620、标准 1020×760、宽屏 1280×820、大屏 1440×900），从「视图 → 窗口大小」直接改，也可在设置里选。
 - 打开「记住窗口大小」后，手动拖动窗口会在 600 ms 防抖后写回设置；关闭时只保留预设值。
 - 双击菜单栏空白处放大 / 还原窗口。
+
+## 划词翻译
+
+在任意程序里拖选一段文字（浏览器里也一样），松开鼠标后光标旁浮出一枚 **translate** 小图标，点它就把选中内容送进本窗口翻译。**原文不会被替换，也不会被修改** —— 译文只出现在这里。
+
+| 操作 | 结果 |
+| --- | --- |
+| 拖选一段文字 | 松开鼠标后浮出图标（需拖出 6px 且超过 60ms，避免和单击混淆） |
+| 双击一个词 | 同上，方便查单词 |
+| 点图标 | 窗口置顶、还原并聚焦，随后翻译选中内容 |
+| 右键 / 中键 / 滚轮 / 点别处 | 收起图标，不做任何事 |
+
+图标是一个独立的无边框窗口（`bubble.html`），带 `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST`，**不会抢焦点**，所以它不会打断你在原程序里的输入或选择。正因为拿不到鼠标焦点，点击不能依赖 WebView 事件，而是由全局鼠标钩子（`WH_MOUSE_LL`）对图标窗口的屏幕矩形做命中测试后接管。
+
+**外观**：一枚横着的字标 —— 小写的 `translate`（字距放宽）加底边一条四段彩虹条（蓝 40% / 橄榄 25% / 金 20% / 橙 15%，和主界面顶部条同一套比例与配色）。整体跟随皮肤：`plain` 下是白底深字、两端全圆的胶囊；`meridian` 下是深色仪表屏加金色描边、接近直角，和输入卡片是同一种语言。设计尺寸 96 × 30 逻辑像素，字号按开方阻尼缩放，再乘显示器 DPI 得到窗口物理尺寸；贴近屏幕边缘时自动收进工作区。
+
+> 关闭主窗口就是退出程序：划词图标是个常驻的隐藏窗口，所以 `main` 的关闭事件会显式走一遍收摊流程（停钩子 → 销毁图标窗口 → 退进程）。否则进程会一直挂着，钩子还在装、划词还会弹图标，而且单实例插件会把下一次启动当成重复启动直接吞掉。
+
+### 取词方式
+
+优先走 Windows UI Automation（`IUIAutomationTextPattern::GetSelection`），这是**纯只读**的，不碰剪贴板，也不会向目标程序发送任何输入。Chromium 把文本模式挂在文档节点上，所以读不到时会沿控件树向上找最多三层祖先。
+
+读不到时才退到剪贴板兜底：先快照剪贴板 → 清空 → 模拟 `Ctrl+C` → 轮询 `CF_UNICODETEXT` → **把剪贴板原样还原**。先清空是为了区分「复制成功但内容为空」和「根本没复制」。含 GDI 句柄的格式（位图、元文件等）不参与还原，避免句柄失效。在资源管理器里这条兜底路径会被禁用，免得选中若干文件时被误触发成「复制文件」。若你此刻正按着 `Ctrl`，也不会发送合成的 `Ctrl+C`。
+
+> 一次最多取 5000 个 Unicode 字符，超出部分截断。
+
+### 资源管理器右键菜单
+
+在文件或文件夹上点右键会多出一项 **翻译（translater）**，选中文本文件即可把内容读进本窗口翻译。支持 UTF-8（含 BOM）、UTF-16 LE/BE 与 GBK 编码，单个文件上限 512 KB。
+
+菜单项写在 `HKCU\Software\Classes` 下（`*\shell\Translater` 与 `Directory\shell\Translater`），**只影响当前用户、不需要管理员权限**，取消勾选就整项删除。`MultiSelectModel=Single` 保证选中多个文件时只开一个窗口。Windows 11 默认把它折叠进「显示更多选项」，这是系统行为。
+
+从菜单启动时若程序已在运行，会由单实例插件把命令行参数转交给已有窗口，不会开出第二个进程。
+
+> **浏览器右键菜单做不了。** Chrome / Edge 的右键菜单是浏览器自己绘制的，Windows 没有提供任何注册表或 Shell 扩展机制能往里加条目，唯一的正规途径是安装浏览器扩展。所以浏览器里用「划词弹图标」；资源管理器的右键菜单则可以注册。
+
+三项开关在「视图」菜单与设置对话框里，分别控制划词取词、剪贴板兜底、资源管理器右键菜单。
 
 ## 翻译引擎
 
@@ -102,6 +139,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/desktop.ps1 -Act
 
 可执行文件会复制到 `artifacts/Translater.exe`。安装包位于构建缓存目录的 `release/bundle` 下。脚本会输出实际路径；没有配置其他目录时，默认使用 `src-tauri/target`，本机已有 D 盘项目缓存时会复用该目录。
 
+不要直接把普通 `cargo build --release` 的输出当作正式版：Rust 的 release 优化并不代表 Tauri 已启用生产资源协议。缺少 `tauri/custom-protocol` 时，主窗口与划词悬浮窗口仍会连接 `127.0.0.1:1420`，关闭 Vite 后就会白屏、连接失败。构建脚本现在会拒绝这种 release 构建；上面的桌面构建入口会显式启用生产资源协议并先构建两个 HTML 入口。手动构建须先执行 `pnpm build`，再执行 `cargo build --manifest-path src-tauri/Cargo.toml --release --features tauri/custom-protocol`。
+
 ## 使用
 
 - 输入或粘贴文本，停顿后自动翻译；可以在设置中关闭自动翻译。
@@ -112,6 +151,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/desktop.ps1 -Act
 - 复制按钮复制完整译文。朗读优先播放引擎返回的 mp3（有道提供），没有音频时退回系统 SpeechSynthesis。
 - 一次最多翻译 5000 个 Unicode 字符；长文请分段。
 - 翻译结果缓存最长 24 小时，最多 2000 条，程序退出后清空。
+- 在别的程序里划词后点浮出的 translate 图标，或对文本文件用右键的「翻译（translater）」，选中内容会直接进输入框并立即翻译。
 
 ## 设置文件
 
@@ -129,9 +169,16 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/desktop.ps1 -Act
   "font": "md",
   "windowWidth": 1020,
   "windowHeight": 760,
-  "rememberWindow": false
+  "rememberWindow": false,
+  "selectTranslate": true,
+  "clipboardFallback": true,
+  "shellMenu": true
 }
 ```
+
+`selectTranslate` 控制划词取词（全局鼠标钩子），`clipboardFallback` 控制读不到 UI Automation 时是否用剪贴板兜底，`shellMenu` 控制资源管理器右键菜单是否注册。
+
+`shellMenu` 只是意图，**界面上的勾选状态以注册表实际内容为准**：启动时会重新查一次注册表，你若在别处删掉了菜单项，勾会自动落下，避免显示与实际不符。
 
 旧版本写下的设置文件缺少 `engine`、`historyMode`、`theme` 等字段时仍可正常加载，缺失字段会取默认值。窗口尺寸限制在 720×480 到 3840×2160 之间，越界会被拒绝（启动读取时则收敛到边界）。
 
@@ -145,7 +192,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/desktop.ps1 -Act
 # TypeScript 类型检查及前端生产构建
 pnpm build
 
-# Rust 单元测试：设置、缓存、三个引擎的响应解析、历史库、导出
+# Rust 单元测试：设置、缓存、三个引擎的响应解析、历史库、导出、取词与右键菜单
 pnpm test:rust
 
 # 真实网络冒烟测试（默认 #[ignore]，需要显式打开）
@@ -154,6 +201,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/desktop.ps1 -Act
 # 启动 Vite 后，在另一终端执行界面回归测试
 pnpm dev
 pnpm test:ui
+
+# 关闭 Vite 和已有桌面实例后，验证正式 EXE 独立启动、双窗口资源、真实 IPC 与退出
+pnpm test:desktop
 ```
 
 冒烟测试覆盖引擎表与三个驱动的真实请求。Google 相关用例需要可达的网络或代理，其余用例国内直连即可通过。只跑有道：
@@ -162,7 +212,9 @@ pnpm test:ui
 cargo test --manifest-path src-tauri/Cargo.toml --test live_google -- --ignored --nocapture youdao
 ```
 
-界面测试使用已安装的 Microsoft Edge 与模拟 Tauri IPC，共 108 项断言，覆盖引擎选择器、全部词典板块、历史抽屉（列表、搜索、删除、清空、回填）、导出流程、设置校验、皮肤与字号切换、窗口预设、菜单栏（点击 / 悬停 / 键盘导航 / 关闭）、说明对话框、异步竞态、错误恢复、语言互换、输入限制与键盘焦点。截图保存在 `test-results`（含 `meridian.png` 与 `meridian-compact.png`）。这些测试与真实网络测试分开执行。
+界面测试使用已安装的 Microsoft Edge 与模拟 Tauri IPC，共 167 项断言，覆盖引擎选择器、全部词典板块、历史抽屉（列表、搜索、删除、清空、回填）、导出流程、设置校验、皮肤与字号切换、窗口预设、菜单栏（点击 / 悬停 / 键盘导航 / 关闭）、说明对话框、划词取词与右键菜单开关、`translate-selection` 事件回填、`--translate-file` 冷启动与注册表状态同步、悬浮图标页渲染（字标、彩虹条占比、圆角与字号随高度缩放、换皮肤重绘）、异步竞态、错误恢复、语言互换、输入限制与键盘焦点。截图保存在 `test-results`（含 `meridian.png` 与 `meridian-compact.png`）。这些测试与真实网络测试分开执行。
+
+> 划词取词依赖真实的桌面会话，无法在无头测试里跑通。回归测试只覆盖「后端发事件之后界面怎么做」以及图标页的渲染，钩子 → 图标 → 点击的完整往返需要手动验收。
 
 设计与验证记录见 `design/index.html`。三个引擎都使用公开的非官方接口，服务可用性及词典字段由上游决定；HTTP 429 使用有限次数的退避重试，其他失败提供可恢复错误提示。
 
@@ -176,5 +228,8 @@ cargo test --manifest-path src-tauri/Cargo.toml --test live_google -- --ignored 
 - `src-tauri/src/settings.rs`：配置文件默认值、校验与读写。
 - `src-tauri/src/translate`：驱动抽象（`driver.rs`）、数据模型（`model.rs`）、三个引擎实现、错误模型、TTL/LRU 缓存。
 - `src-tauri/src/history.rs`：SQLite 历史库；`src-tauri/src/export.rs`：四种导出格式。
+- `src-tauri/src/selection`：划词取词。`mod.rs` 编排、工作线程与退出收摊，`hook.rs` 全局鼠标钩子（含停钩子），`uia.rs` UI Automation 读选区，`clipboard.rs` 剪贴板兜底与还原，`bubble.rs` 悬浮图标窗口的尺寸、位置与外观。
+- `src-tauri/src/shell_menu.rs`：资源管理器右键菜单的注册与卸载；`src-tauri/src/file_text.rs`：从菜单传入的文件路径读取文本并猜编码。
+- `src/bubble.ts` / `bubble.html` / `src/bubble.css`：悬浮图标页，只渲染，点击由钩子接管。
 - `scripts/desktop.ps1`：Windows 工具链检测、开发、测试与构建入口；`scripts/test-ui.mjs`：界面回归测试。
 - `concept/meridian`：`meridian` 皮肤的设计稿来源（`DESIGN.md` 为权威色板与排印规范）。

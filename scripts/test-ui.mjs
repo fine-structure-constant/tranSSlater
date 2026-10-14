@@ -22,6 +22,26 @@ try {
       proxy: "", autoTranslate: true, autoSpeak: false, langPair: "auto|zh-CN",
       engine: "google", historyMode: "all",
       theme: "plain", font: "md", windowWidth: 1020, windowHeight: 760, rememberWindow: false,
+      selectTranslate: true, clipboardFallback: true, shellMenu: true,
+    };
+    // 划词 / 右键菜单通道的替身
+    window.eventListeners = [];
+    window.startupText = null;
+    window.registryHasShellMenu = true;
+    let callbackSeq = 0;
+    const transformCallback = (callback, once = false) => {
+      const id = ++callbackSeq;
+      window[`_${id}`] = (payload) => {
+        if (once) delete window[`_${id}`];
+        callback(payload);
+      };
+      return id;
+    };
+    // 测试里用它模拟后端 emit("translate-selection", ...) 到主窗口
+    window.emitEvent = (event, payload) => {
+      for (const listener of window.eventListeners) {
+        if (listener.event === event) window[`_${listener.handler}`]({ event, id: 0, payload });
+      }
     };
     window.fakeHistory = [
       { id: 2, query: "coercion", fromLang: "en", toLang: "zh-CN", engine: "youdao",
@@ -88,14 +108,28 @@ try {
       { id: "youdao", name: "有道词典", note: "国内直连，无需代理；柯林斯、专业释义、词源、词组短语、同根词最全", needsProxy: false, supportsSentence: true, supportsDictionary: true, supportsAudio: true },
       { id: "youdaoTrans", name: "有道翻译", note: "国内直连，无需代理；单词与整句都能翻", needsProxy: false, supportsSentence: true, supportsDictionary: false, supportsAudio: true },
     ];
-    window.__TAURI_INTERNALS__ = { invoke: async (cmd, args) => {
+    window.__TAURI_INTERNALS__ = { transformCallback, invoke: async (cmd, args) => {
       window.calls.push({ cmd, args });
+      if (cmd === "plugin:event|listen") {
+        window.eventListeners.push({ event: args.event, handler: args.handler });
+        return window.eventListeners.length;
+      }
+      if (cmd === "plugin:event|unlisten") {
+        window.eventListeners = window.eventListeners.filter(l => l.handler !== args.eventId);
+        return null;
+      }
       if (cmd === "load_settings") return window.fakeSettings;
       if (cmd === "save_settings") {
         if (args.settings.proxy === "invalid") throw "输入或设置无效：代理地址无效";
         window.fakeSettings = args.settings;
         return;
       }
+      if (cmd === "take_startup_text") {
+        const text = window.startupText;
+        window.startupText = null;
+        return text;
+      }
+      if (cmd === "shell_menu_registered") return window.registryHasShellMenu;
       if (cmd === "engines") return engines;
       if (cmd === "cache_stats") return { size: cache.size };
       if (cmd === "clear_cache") { cache.clear(); return; }
@@ -452,6 +486,54 @@ try {
   await page.locator(".chrome").dblclick({ position: { x: 500, y: 12 } });
   check(await page.evaluate(() => window.maximizeCalls === 1), "double-clicking the chrome toggles maximize");
 
+  // ── 划词翻译与资源管理器右键菜单 ──────────────────────────
+  await menuTitle("视图").click();
+  for (const cmd of ["select-translate", "clipboard-fallback", "shell-menu"]) {
+    check(await page.locator(`.menu-pop:not([hidden]) [data-cmd="${cmd}"]`).count() === 1,
+      `the view menu exposes ${cmd}`);
+  }
+  check(await page.locator('[data-cmd="select-translate"]').getAttribute("aria-checked") === "true",
+    "selection translation starts enabled");
+  check(await page.locator('[data-cmd="clipboard-fallback"]').getAttribute("aria-checked") === "true",
+    "the clipboard fallback starts enabled");
+  check(await page.locator('[data-cmd="shell-menu"]').getAttribute("aria-checked") === "true",
+    "the explorer context menu starts enabled");
+
+  await page.locator('[data-cmd="select-translate"]').click();
+  await page.waitForFunction(() => window.fakeSettings.selectTranslate === false);
+  check(await page.evaluate(() => window.fakeSettings.selectTranslate === false),
+    "turning selection translation off is persisted");
+  await menuTitle("视图").click();
+  check(await page.locator('[data-cmd="select-translate"]').getAttribute("aria-checked") === "false",
+    "the check mark follows the saved value");
+  await page.locator('[data-cmd="select-translate"]').click();
+  await page.waitForFunction(() => window.fakeSettings.selectTranslate === true);
+
+  await menuTitle("视图").click();
+  await page.locator('[data-cmd="shell-menu"]').click();
+  await page.waitForFunction(() => window.fakeSettings.shellMenu === false);
+  check(await page.evaluate(() => window.fakeSettings.shellMenu === false),
+    "turning the explorer context menu off is persisted");
+
+  // 后端把划词结果 emit 过来：填进输入框并翻译
+  await page.evaluate(() => window.emitEvent("translate-selection", "  coercion  "));
+  await page.waitForFunction(() => document.querySelector("#input").value === "coercion");
+  check(await page.locator("#input").inputValue() === "coercion",
+    "a selected-text event fills the input, trimmed");
+  await page.waitForFunction(() => document.querySelector(".main-trans")?.textContent === "译文：coercion");
+  check((await page.locator(".main-trans").innerText()).includes("译文：coercion"),
+    "a selected-text event triggers translation");
+  check(await page.evaluate(() => window.calls.some(c => c.cmd === "translate" && c.args.text === "coercion")),
+    "the selected text is what gets sent to the engine");
+
+  // 设置弹窗里的三个开关
+  await page.locator("#btn-settings").click();
+  check(await page.locator("#select-translate").isChecked(), "settings expose the selection toggle");
+  check(await page.locator("#clipboard-fallback").isChecked(), "settings expose the clipboard fallback toggle");
+  check(await page.locator("#shell-menu").isChecked() === false,
+    "settings reflect the saved explorer-menu value");
+  await page.locator("#btn-close-settings").click();
+
   // ── 说明 ──────────────────────────────────────────────────
   await page.keyboard.press("F1");
   await page.waitForFunction(() => !document.querySelector("#help-mask").hidden);
@@ -463,6 +545,13 @@ try {
   check((await page.locator("#help-paths-table").innerText()).includes("settings.json"),
     "help lists the settings file location");
   check((await page.locator("#help-version").innerText()).includes("0.1.0"), "help shows the app version");
+  check(await page.locator("#help-select").count() === 1, "help documents selection translation");
+  const helpSelect = await page.locator("#help-select").innerText();
+  check(helpSelect.includes("不会被替换"), "help states the original text is never replaced");
+  check(helpSelect.includes("UI Automation"), "help explains how the selection is read");
+  check(helpSelect.includes("浏览器"), "help explains why browsers cannot host a menu item");
+  check((await page.locator("#help-shell-menu").innerText()).includes("HKCU"),
+    "help explains where the explorer menu entry is written");
   await page.keyboard.press("Escape");
   check(await page.locator("#help-mask").isHidden(), "Escape closes the help dialog");
 
@@ -637,6 +726,92 @@ try {
   await page.setViewportSize({ width: 720, height: 480 });
   await page.waitForFunction(() => !document.querySelector("#word-confetti"), null, { polling: 10, timeout: 1000 });
   check(await page.locator("#word-confetti").count() === 0, "window resize cleans up active particles");
+
+  // ── 冷启动：--translate-file 与注册表状态同步 ─────────────
+  await page.addInitScript(() => {
+    window.startupText = "from-command-line";
+    // 用户可能在别处删掉了注册表项：界面要以注册表为准，不能凭设置文件想当然
+    window.fakeSettings = { ...window.fakeSettings, shellMenu: true };
+    window.registryHasShellMenu = false;
+  });
+  await page.reload();
+  await page.waitForFunction(() => document.querySelector("#input").value === "from-command-line");
+  check(await page.locator("#input").inputValue() === "from-command-line",
+    "a cold start with --translate-file loads the file text");
+  await page.waitForFunction(() => document.querySelector(".main-trans")?.textContent === "译文：from-command-line");
+  check((await page.locator(".main-trans").innerText()).includes("译文：from-command-line"),
+    "the startup file is translated without any click");
+  check(await page.evaluate(() => window.startupText === null), "startup text is consumed exactly once");
+  await page.waitForFunction(() =>
+    document.querySelector('[data-cmd="shell-menu"]').getAttribute("aria-checked") === "false");
+  check(await page.locator('[data-cmd="shell-menu"]').getAttribute("aria-checked") === "false",
+    "the shell menu check follows the registry, not the settings file");
+
+  // ── 划词悬浮图标页 ────────────────────────────────────────
+  // 图标窗口是个独立的 WebView，页面只负责渲染，点击由 Rust 钩子接管。
+  const bubble = await browser.newPage({ viewport: { width: 120, height: 40 } });
+  const bubbleErrors = [];
+  bubble.on("pageerror", e => bubbleErrors.push(e.message));
+  await bubble.addInitScript(() => localStorage.setItem("translater.theme", "meridian"));
+  await bubble.goto("http://127.0.0.1:1420/bubble.html");
+  await bubble.waitForFunction(() => typeof window.__applyAppearance === "function");
+  check(await bubble.locator(".bubble__word").innerText() === "translate",
+    "the bubble is a translate wordmark, not a glyph");
+  check(await bubble.locator(".bubble__spectrum i").count() === 4,
+    "the bubble carries the four-segment rainbow bar");
+  check(await bubble.evaluate(() => document.documentElement.dataset.theme) === "meridian",
+    "the bubble restores the last theme before Rust says anything");
+
+  // Rust 传进来的是逻辑像素：CSS 尺寸跟它走，窗口物理尺寸另算，比例不会随 DPI 走样
+  await bubble.evaluate(() => window.__applyAppearance("plain", 120, 40));
+  const bubbleStyle = await bubble.evaluate(() => {
+    const root = document.documentElement;
+    const pill = getComputedStyle(document.querySelector(".bubble"));
+    const word = getComputedStyle(document.querySelector(".bubble__word"));
+    const bar = getComputedStyle(document.querySelector(".bubble__spectrum"));
+    const segments = [...document.querySelectorAll(".bubble__spectrum i")]
+      .map(el => getComputedStyle(el).width);
+    return {
+      width: root.style.getPropertyValue("--bubble-width"),
+      height: root.style.getPropertyValue("--bubble-height"),
+      theme: root.dataset.theme,
+      radius: pill.borderTopLeftRadius,
+      background: pill.backgroundColor,
+      fontSize: word.fontSize,
+      letterSpacing: word.letterSpacing,
+      barHeight: bar.height,
+      segments,
+    };
+  });
+  const near = (value, expected) => Math.abs(parseFloat(value) - expected) < 0.05;
+  check(bubbleStyle.width === "120px" && bubbleStyle.height === "40px" && bubbleStyle.theme === "plain",
+    "Rust can restyle the bubble through __applyAppearance");
+  check(near(bubbleStyle.radius, 20) && near(bubbleStyle.fontSize, 13.6),
+    "plain draws a pill: radius and glyph both scale with the height");
+  check(near(bubbleStyle.barHeight, 5.2), "the rainbow bar is a fixed fraction of the height");
+  // 段宽是相对内边距算的（要减掉左右各 1px 边框），所以断言占比而不是绝对像素
+  const segmentTotal = bubbleStyle.segments.reduce((sum, w) => sum + parseFloat(w), 0);
+  const shares = bubbleStyle.segments.map(w => parseFloat(w) / segmentTotal);
+  check(shares.every((s, i) => Math.abs(s - [0.4, 0.25, 0.2, 0.15][i]) < 0.005),
+    `rainbow segments keep the 40/25/20/15 split (${shares.map(s => s.toFixed(3)).join(", ")})`);
+  check(parseFloat(bubbleStyle.letterSpacing) > 0.5, "the wordmark is letter-spaced, not cramped");
+  await bubble.screenshot({ path: "test-results/bubble-plain.png" });
+
+  await bubble.evaluate(() => { localStorage.setItem("translater.theme", "meridian"); });
+  await bubble.reload();
+  await bubble.waitForFunction(() => document.documentElement.dataset.theme === "meridian");
+  // 重新注入一次尺寸：reload 之后 Rust 那边还没调过 __applyAppearance
+  await bubble.evaluate(() => window.__applyAppearance("meridian", 120, 40));
+  const meridianBubble = await bubble.evaluate(() => {
+    const pill = getComputedStyle(document.querySelector(".bubble"));
+    return { background: pill.backgroundColor, radius: pill.borderTopLeftRadius };
+  });
+  check(meridianBubble.background !== bubbleStyle.background,
+    "switching the skin repaints the bubble from theme tokens");
+  check(near(meridianBubble.radius, 7.2),
+    "meridian squares the corners off instead of drawing a pill");
+  await bubble.screenshot({ path: "test-results/bubble-meridian.png" });
+  check(bubbleErrors.length === 0, `no uncaught bubble errors (${bubbleErrors.join(", ")})`);
 
   check(errors.length === 0, `no uncaught UI errors (${errors.join(", ")})`);
 

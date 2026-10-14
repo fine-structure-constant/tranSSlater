@@ -56,8 +56,8 @@ try {
         'smoke' { & cargo test --manifest-path src-tauri/Cargo.toml --test live_google -- --ignored --nocapture --test-threads=1 }
         'dev' { & node node_modules/@tauri-apps/cli/tauri.js dev }
         'build' {
-            if ($NoBundle) { & node node_modules/@tauri-apps/cli/tauri.js build --no-bundle }
-            else { & node node_modules/@tauri-apps/cli/tauri.js build }
+            if ($NoBundle) { & node node_modules/@tauri-apps/cli/tauri.js build --no-bundle --features tauri/custom-protocol }
+            else { & node node_modules/@tauri-apps/cli/tauri.js build --features tauri/custom-protocol }
         }
     }
     $resultCode = $LASTEXITCODE

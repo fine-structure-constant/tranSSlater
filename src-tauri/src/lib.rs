@@ -1,19 +1,26 @@
 //! Tauri 命令层：把翻译驱动、缓存与历史库暴露给前端。
 
 mod export;
+mod file_text;
 mod history;
+mod selection;
 mod settings;
+#[cfg(windows)]
+mod shell_menu;
 pub mod translate;
 
 use std::path::PathBuf;
 use std::sync::{Mutex, RwLock};
 
 use serde::Serialize;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use translate::{CacheKey, EngineHub, EngineInfo, TranslateCache, TranslateError, TranslateResult};
 
 use export::Format;
 use history::{HistoryStore, HistorySummary};
+
+/// 划词或右键菜单把文字送进主窗口时用的事件名。
+const EVENT_TRANSLATE_SELECTION: &str = "translate-selection";
 
 /// 运行期可变配置。改设置时整体替换，读的时候克隆出来，避免跨 `.await` 持锁。
 #[derive(Clone)]
@@ -32,6 +39,9 @@ struct AppState {
     history_path: PathBuf,
     config_dir: PathBuf,
     data_dir: PathBuf,
+    /// 冷启动时由 `--translate-file` 带进来的文字。前端启动后来取走，
+    /// 因为 `setup()` 阶段前端还没加载，事件发出去会丢。
+    pending_text: Mutex<Option<String>>,
 }
 
 impl AppState {
@@ -64,6 +74,7 @@ impl AppState {
                 history_path,
                 config_dir,
                 data_dir,
+                pending_text: Mutex::new(None),
             },
             loaded,
         ))
@@ -243,19 +254,46 @@ fn app_info(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> AppInfo
 
 #[tauri::command]
 fn quit_app(app: tauri::AppHandle) {
+    // 和关主窗口走同一条收摊路径：先把钩子停掉，再退进程
+    selection::shutdown(&app);
     app.exit(0);
 }
 
+// ── 划词翻译与资源管理器右键菜单 ────────────────────────────
+
+/// 冷启动时 `--translate-file` 带进来的文字。取走一次就没了，避免重复翻译。
 #[tauri::command]
-fn load_settings(state: tauri::State<'_, AppState>) -> Result<settings::Settings, TranslateError> {
+fn take_startup_text(state: tauri::State<'_, AppState>) -> Option<String> {
+    state
+        .pending_text
+        .lock()
+        .ok()
+        .and_then(|mut pending| pending.take())
+}
+
+/// 资源管理器右键菜单项当前是否已注册。
+#[tauri::command]
+fn shell_menu_registered() -> bool {
+    #[cfg(windows)]
+    return shell_menu::is_registered();
+    #[cfg(not(windows))]
+    return false;
+}
+
+#[tauri::command]
+fn load_settings(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<settings::Settings, TranslateError> {
     let valid = state.engine_ids();
     let loaded = settings::load(&state.settings_path, &valid)?;
-    apply_settings(&state, &loaded)?;
+    apply_settings(&app, &state, &loaded)?;
     Ok(loaded)
 }
 
 #[tauri::command]
 fn save_settings(
+    app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
     settings: settings::Settings,
 ) -> Result<(), TranslateError> {
@@ -263,16 +301,36 @@ fn save_settings(
     // 先验证、再落盘、最后才切换运行时，任一步失败都不会让内存状态与文件不一致。
     settings.validate(&valid)?;
     settings::save(&state.settings_path, &settings, &valid)?;
-    apply_settings(&state, &settings)
+    apply_settings(&app, &state, &settings)
 }
 
-/// 把设置应用到运行时：代理热替换 + 引擎/历史策略更新。
-fn apply_settings(state: &AppState, s: &settings::Settings) -> Result<(), TranslateError> {
+/// 把设置应用到运行时。
+///
+/// 代理与引擎热替换；皮肤/字号同步给划词悬浮图标；划词开关与资源管理器右键菜单
+/// 都做成幂等的，所以每次启动、每次保存都整体同步一遍，程序被挪了位置也能自愈。
+fn apply_settings(
+    app: &tauri::AppHandle,
+    state: &AppState,
+    s: &settings::Settings,
+) -> Result<(), TranslateError> {
     state.engines.set_proxy(Some(&s.proxy))?;
     *state.runtime.write().expect("runtime 锁中毒") = Runtime {
         engine: s.engine.clone(),
         record_history: s.history_mode == "all",
     };
+
+    selection::set_enabled(s.select_translate);
+    selection::set_clipboard_fallback(s.clipboard_fallback);
+    selection::set_appearance(&s.theme, s.font_scale());
+    if s.select_translate {
+        selection::prewarm(app.clone());
+    } else {
+        selection::destroy_bubble(app);
+    }
+
+    #[cfg(windows)]
+    shell_menu::apply(s.shell_menu).map_err(TranslateError::Settings)?;
+
     Ok(())
 }
 
@@ -349,14 +407,82 @@ fn export_history(
     export::write(&store, format, &target)
 }
 
+/// 把文字送到主窗口翻译，并把它提到最前。
+fn deliver_to_main(app: &tauri::AppHandle, text: String) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+    let _ = app.emit_to("main", EVENT_TRANSLATE_SELECTION, text);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // 必须第一个注册：资源管理器右键菜单会再起一个进程，
+        // 单实例插件把它的参数搬给已经在跑的那个实例，然后自己退出。
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            if let Some(path) = file_text::arg_value(&argv, file_text::ARG) {
+                match file_text::read(std::path::Path::new(&path)) {
+                    Ok(text) => deliver_to_main(app, text),
+                    Err(err) => eprintln!("打开 {path} 失败：{err}"),
+                }
+            } else {
+                // 没带参数就只是又点了一次图标，把窗口叫出来
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.unminimize();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            let (state, loaded) = AppState::new(app.handle())?;
-            apply_startup_window_size(app.handle(), &loaded);
+            let handle = app.handle().clone();
+            let (state, loaded) = AppState::new(&handle)?;
+
+            // 冷启动带 --translate-file：前端还没加载，事件会丢，先存下来等它来取
+            let args: Vec<String> = std::env::args().collect();
+            if let Some(path) = file_text::arg_value(&args, file_text::ARG) {
+                match file_text::read(std::path::Path::new(&path)) {
+                    Ok(text) => {
+                        *state.pending_text.lock().expect("pending 锁中毒") = Some(text);
+                    }
+                    Err(err) => eprintln!("打开 {path} 失败：{err}"),
+                }
+            }
+
+            apply_startup_window_size(&handle, &loaded);
+
+            // 划词图标是个常驻的隐藏窗口。只要它还在，Tauri 就认为「还有窗口没关」，
+            // 关掉主窗口后进程会一直挂着 —— 鼠标钩子还在装、划词照样弹图标，
+            // 而且单实例插件会把下一次启动当成「重复启动」直接吞掉，程序再也打不开。
+            // 所以这里明确约定：主窗口关闭 = 整个程序退出。
+            if let Some(main) = handle.get_webview_window("main") {
+                let closing = handle.clone();
+                main.on_window_event(move |event| {
+                    if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                        selection::shutdown(&closing);
+                        closing.exit(0);
+                    }
+                });
+            }
+
+            if let Err(err) = selection::install(
+                &handle,
+                loaded.select_translate,
+                loaded.clipboard_fallback,
+                &loaded.theme,
+                loaded.font_scale(),
+            ) {
+                eprintln!("划词模块初始化失败：{err}");
+            }
+            if loaded.select_translate {
+                selection::prewarm(handle.clone());
+            }
+
             app.manage(state);
             Ok(())
         })
@@ -370,6 +496,8 @@ pub fn run() {
             toggle_maximize,
             app_info,
             quit_app,
+            take_startup_text,
+            shell_menu_registered,
             load_settings,
             save_settings,
             history_list,

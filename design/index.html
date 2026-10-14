@@ -1,6 +1,17 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Translater 实现与验证</title><style>body{font:16px/1.7 system-ui,sans-serif;color:#242830;max-width:1000px;margin:40px auto;padding:0 24px}table{border-collapse:collapse;width:100%;display:block;overflow-x:auto}th,td{padding:12px;text-align:left;border-bottom:1px solid #ddd}a{color:#245bb8}code{background:#f3f4f6;padding:2px 5px}img{max-width:100%;border:1px solid #ddd}h2{margin-top:2em}</style></head><body>
 <h1>Translater 实现与验证</h1>
+<section id="selection-startup-fix">
+<h2>2026-10-14 · 划词版本白屏与连接失败修复</h2>
+<p>当前基线 bfab89f；检查时已有划词功能等未提交改动，全部保留。REQ-004（requested）：定位、汇报并修复编译后白屏与连接失败，保留现有界面和划词交互。验收：关闭 Vite 后正式 EXE 的主窗口与悬浮窗口正常加载，真实后端 IPC 可用，退出后无隐藏窗口残留。</p>
+<p>已确认：故障 EXE 的主窗口实际访问 <code>http://127.0.0.1:1420/</code>，悬浮窗口访问 <code>http://127.0.0.1:1420/bubble.html</code>；两者均显示 <code>ERR_CONNECTION_REFUSED</code>。release 构建缓存中的 Tauri features 不含 <code>custom-protocol</code>，应用构建输出含 <code>cargo:rustc-cfg=dev</code>。这是开发模式 EXE 被作为正式版交付造成的页面连接失败。<a href="https://docs.rs/tauri/2.12.3/tauri/#cargo-features">Tauri 官方文档</a>也说明 <code>custom-protocol</code> 控制生产与开发环境。</p>
+<p>DEC-004（proposed；依本次修复授权实施）：正式构建显式启用 <code>tauri/custom-protocol</code>，拒绝遗漏协议的 release 构建，并增加运行真实 EXE 的回归入口。无需调整视觉设计。</p>
+<table><tr><th>实现</th><th>代码与证据</th><th>状态</th></tr>
+<tr><td>IMP-005 / REQ-004：生产构建约束、双窗口独立启动回归、重建正式 EXE。</td><td><a href="../src-tauri/build.rs">构建保护</a>、<a href="../scripts/desktop.ps1">构建入口</a>、<a href="../scripts/test-desktop.mjs">真实 EXE 回归</a>；<a href="../test-results/startup-before.png">修复前错误页面截图</a>、<a href="../test-results/desktop-after.log">正式 EXE 回归日志</a>。</td><td>verified：错误构建被拒绝，正式构建 passed，9 项真实 EXE 检查 passed。</td></tr></table>
+<ul><li>前端类型检查与双 HTML 入口生产构建：passed。</li><li>Rust 75 项单元测试：passed；167 项界面回归：passed，包含划词事件、冷启动文件、设置开关与悬浮页样式（模拟 IPC）。</li><li>8 项真实联网冒烟：passed，覆盖 Google、有道词典与有道翻译；<a href="../test-results/live-smoke.log">联网测试日志</a>。</li><li>原故障 EXE 的真实桌面回归：failed，明确检出 ERR_CONNECTION_REFUSED；<a href="../test-results/desktop-before.log">负向验证日志</a>。</li><li>新版真实 EXE：9 项 passed。Vite 关闭；主页面为 http://tauri.localhost/，悬浮页为 http://tauri.localhost/bubble.html；真实 IPC 引擎列表与事件通道正常，设置加载无报错，脚本无未捕获异常，退出时隐藏窗口与进程一起结束。主窗口截图已人工检查。</li><li><a href="../artifacts/Translater.exe">新版独立 EXE</a>：7,792,640 字节，已替换原错误产物；未生成安装包。</li></ul>
+<figure><img src="../test-results/desktop-main.png" alt="新版正式 EXE 在 Vite 关闭时正常加载主界面"><figcaption>implementation capture · 正式 EXE 的真实 WebView2 页面与 IPC，Vite 关闭；显示已有用户主题和历史计数。</figcaption></figure>
+<p>本次白屏与连接失败修复已完成，无待定设计决策。边界：真实跨应用鼠标拖选、UI Automation 与剪贴板还原仍为 manual check remaining；此次未声称完成这些桌面交互的端到端人工验证。隐藏悬浮页的生产资源和脚本已验证，其视觉样式由 167 项界面回归覆盖。</p>
+</section>
 <p><b>最新方向：</b>依用户最新要求收敛为底部四点、单波，缩小单词与 emoji，保留旋转和重叠。最多 232 个粒子，使用位图缓存、分辨率预算及离屏跳过优化绘制。132 项界面检查通过；同场景浏览器 A/B 中位图版帧间隔中位数约 16.7ms、P95 约 17ms。正式 <a href="../artifacts/Translater.exe">Translater.exe</a> 已构建。<a href="feature/word-confetti.html">查看当前实现、截图和性能证据</a>。上一版满窗三波保留为 <a href="../artifacts/Translater-party.exe">Translater-party.exe</a>。</p>
 <p><b>2026-10-13 更新：</b>当前项目已有 Git（基线 ae1fd3d）、三个翻译引擎、SQLite 历史、多主题与菜单栏。以下 10-11 记录作为历史证据保留。新需求 REQ-003：增加历史单词与 emoji 礼炮，<a href="feature/word-confetti.html">查看功能与验证记录</a>。状态：verified；42 项 Rust 测试、126 项界面检查通过，正式 EXE 已更新并独立运行，原生窗口已观察到真实历史词汇礼炮。</p>
 <p>2026-10-11 · Windows / Tauri 2 + Rust + TypeScript · 最终状态：verified。当前目录没有 Git 元数据，保留既有项目结构。下一步：直接运行 <a href="../artifacts/Translater.exe">Translater.exe</a>。</p>

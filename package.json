@@ -11,7 +11,8 @@
     "desktop": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/desktop.ps1 -Action dev",
     "desktop:build": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/desktop.ps1 -Action build",
     "test:rust": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/desktop.ps1 -Action test",
-    "test:ui": "node scripts/test-ui.mjs"
+    "test:ui": "node scripts/test-ui.mjs",
+    "test:desktop": "node scripts/test-desktop.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

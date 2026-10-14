@@ -87,6 +87,24 @@ export function quitApp(): Promise<void> {
   return invoke<void>("quit_app");
 }
 
+// ── 划词翻译与资源管理器右键菜单 ────────────────────────────
+
+/**
+ * 冷启动时由 `--translate-file` 带进来的文字。
+ *
+ * 用「取走」语义而不是「查询」：读到一次之后后端就清空，避免重复翻译。
+ */
+export function takeStartupText(): Promise<string | null> {
+  if (!isTauri()) return Promise.resolve(null);
+  return invoke<string | null>("take_startup_text");
+}
+
+/** 资源管理器右键菜单项当前是否已注册。 */
+export function shellMenuRegistered(): Promise<boolean> {
+  if (!isTauri()) return Promise.resolve(false);
+  return invoke<boolean>("shell_menu_registered");
+}
+
 // ── 历史 ────────────────────────────────────────────────────
 
 export function historyList(

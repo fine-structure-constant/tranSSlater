@@ -22,6 +22,14 @@
 
   /* 区块标题的排印风格：plain 是普通中文，meridian 是工程小标签 */
   --label-spacing: 0;
+
+  /* 品牌四段彩虹条。蓝 40% / 橄榄 25% / 金 20% / 橙 15%。
+     这是品牌元素而不是皮肤元素：主界面的顶部条只在 meridian 显示，
+     但划词悬浮图标在两套皮肤下都要用，所以放在 :root。 */
+  --stripe-1: #4c6370;
+  --stripe-2: #83886a;
+  --stripe-3: #c7a467;
+  --stripe-4: #c74c2d;
 }
 
 /* ── 字号档位 ─────────────────────────────────────────────── */
@@ -96,6 +104,14 @@
   --chrome-bg: #ffffff;
   --chrome-line: #e8eaed;
 
+  /* 划词悬浮图标：浅色胶囊 + 底部彩虹条，白底上的干净版本 */
+  --bubble-bg: #ffffff;
+  --bubble-fg: #1f2328;
+  --bubble-line: #e2e5e9;
+  --bubble-sheen: rgba(255, 255, 255, 0.9);
+  --bubble-glow: rgba(232, 80, 58, 0.22);
+  --bubble-radius-factor: 0.5;
+
   /* 皮肤不启用任何装饰件 */
   --deco: none;
 }
@@ -169,13 +185,16 @@
   --chrome-bg: #eae7de;
   --chrome-line: #aaaea0;
 
-  --deco: block;
+  /* 划词悬浮图标：深色仪表屏 + 底部彩虹条，和输入卡片同一种「凹陷屏」语言。
+     圆角接近直角，跟设备面板一致。 */
+  --bubble-bg: #111f23;
+  --bubble-fg: #e6e8dd;
+  --bubble-line: rgba(199, 164, 103, 0.4);
+  --bubble-sheen: rgba(255, 255, 255, 0.07);
+  --bubble-glow: rgba(199, 164, 103, 0.34);
+  --bubble-radius-factor: 0.18;
 
-  /* 四段彩虹条的配色与占比，见 .spectrum */
-  --stripe-1: #4c6370;
-  --stripe-2: #83886a;
-  --stripe-3: #c7a467;
-  --stripe-4: #c74c2d;
+  --deco: block;
 }
 
 /* ── 皮肤装饰件 ─────────────────────────────────────────────

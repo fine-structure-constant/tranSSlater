@@ -20,6 +20,12 @@ export interface Settings {
   windowHeight: number;
   /** 是否在手动调整窗口后覆盖上面的默认尺寸 */
   rememberWindow: boolean;
+  /** 划词翻译总开关：划选文字后弹出悬浮图标 */
+  selectTranslate: boolean;
+  /** UI Automation 读不到选区时，是否退到「模拟 Ctrl+C 读剪贴板」 */
+  clipboardFallback: boolean;
+  /** 是否在资源管理器右键菜单里注册「翻译（translater）」 */
+  shellMenu: boolean;
 }
 
 /** 皮肤清单。新增皮肤要同时改 theme.css 与 src-tauri/src/settings.rs。 */
@@ -60,7 +66,13 @@ export const DEFAULTS: Settings = {
   windowWidth: 1020,
   windowHeight: 760,
   rememberWindow: false,
+  selectTranslate: true,
+  clipboardFallback: true,
+  shellMenu: true,
 };
+
+/** 主窗口与划词悬浮图标共用的皮肤键，写在 localStorage 里做首帧兜底。 */
+export const THEME_STORAGE_KEY = "translater.theme";
 
 let pendingSave: Promise<void> = Promise.resolve();
 
@@ -97,6 +109,9 @@ export function normalizeSettings(s: Settings): Settings {
     windowWidth: clamp(s.windowWidth, WINDOW_MIN.width, WINDOW_MAX.width),
     windowHeight: clamp(s.windowHeight, WINDOW_MIN.height, WINDOW_MAX.height),
     rememberWindow: Boolean(s.rememberWindow),
+    selectTranslate: s.selectTranslate !== false,
+    clipboardFallback: s.clipboardFallback !== false,
+    shellMenu: s.shellMenu !== false,
   };
 }
 

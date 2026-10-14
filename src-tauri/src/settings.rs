@@ -56,6 +56,12 @@ pub struct Settings {
     pub window_height: f64,
     /// 是否在用户手动缩放窗口后覆盖上面的默认尺寸
     pub remember_window: bool,
+    /// 划词翻译总开关：划选文字后是否弹出悬浮图标
+    pub select_translate: bool,
+    /// UI Automation 读不到选区时，是否允许退到「模拟 Ctrl+C 读剪贴板」
+    pub clipboard_fallback: bool,
+    /// 是否在资源管理器右键菜单里注册「翻译（translater）」
+    pub shell_menu: bool,
 }
 
 impl Default for Settings {
@@ -72,6 +78,9 @@ impl Default for Settings {
             window_width: 1020.0,
             window_height: 760.0,
             remember_window: false,
+            select_translate: true,
+            clipboard_fallback: true,
+            shell_menu: true,
         }
     }
 }
@@ -120,6 +129,22 @@ impl Settings {
             clamp(self.window_width, WINDOW_MIN.0, WINDOW_MAX.0),
             clamp(self.window_height, WINDOW_MIN.1, WINDOW_MAX.1),
         )
+    }
+
+    /// 字号档位对应的倍率。必须与 `src/theme.css` 里 `[data-font]` 的 `--fs` 一致，
+    /// 划词悬浮图标会用它做阻尼缩放。
+    pub fn font_scale(&self) -> f64 {
+        font_scale(&self.font)
+    }
+}
+
+/// 字号 id → 倍率。未登记的值退回 1.0，不 panic。
+pub fn font_scale(font: &str) -> f64 {
+    match font {
+        "sm" => 0.875,
+        "lg" => 1.125,
+        "xl" => 1.25,
+        _ => 1.0,
     }
 }
 
@@ -170,6 +195,10 @@ mod tests {
         assert_eq!(s.font, "md");
         assert_eq!(s.window_size(), (1020.0, 760.0));
         assert!(!s.remember_window);
+        assert!(s.select_translate, "划词翻译默认开启");
+        assert!(s.clipboard_fallback, "剪贴板兜底默认开启");
+        assert!(s.shell_menu, "资源管理器右键菜单默认注册");
+        assert_eq!(s.font_scale(), 1.0);
         assert!(s.validate(&engines()).is_ok());
         assert!(
             Settings {
@@ -265,6 +294,27 @@ mod tests {
     }
 
     #[test]
+    fn every_font_scale_maps_to_a_usable_multiplier() {
+        // 这些值必须与 src/theme.css 里 :root[data-font=...] 的 --fs 一致
+        for (id, scale) in [("sm", 0.875), ("md", 1.0), ("lg", 1.125), ("xl", 1.25)] {
+            let s = Settings {
+                font: id.into(),
+                ..Settings::default()
+            };
+            assert_eq!(s.font_scale(), scale, "{id} 的倍率与 theme.css 不一致");
+        }
+        // 未登记的值不该出现，但真出现了也不能 panic
+        assert_eq!(
+            Settings {
+                font: "?".into(),
+                ..Settings::default()
+            }
+            .font_scale(),
+            1.0
+        );
+    }
+
+    #[test]
     fn old_settings_file_without_new_fields_still_loads() {
         // 兼容旧版本写下的 settings.json：缺 engine / historyMode / theme 等字段时用默认值
         let s: Settings =
@@ -290,6 +340,9 @@ mod tests {
         s.window_width = 1280.0;
         s.window_height = 820.0;
         s.remember_window = true;
+        s.select_translate = false;
+        s.clipboard_fallback = false;
+        s.shell_menu = false;
         save(&path, &s, &engines()).unwrap();
         let reloaded = load(&path, &engines()).unwrap();
         assert!(reloaded.auto_speak);
@@ -298,6 +351,9 @@ mod tests {
         assert_eq!(reloaded.font, "lg");
         assert_eq!(reloaded.window_size(), (1280.0, 820.0));
         assert!(reloaded.remember_window);
+        assert!(!reloaded.select_translate);
+        assert!(!reloaded.clipboard_fallback);
+        assert!(!reloaded.shell_menu);
         s.proxy = "invalid".into();
         assert!(save(&path, &s, &engines()).is_err());
         assert_eq!(load(&path, &engines()).unwrap().proxy, "");

@@ -21,6 +21,8 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
+# 划词翻译时，第二次启动（例如从资源管理器右键菜单调用）把参数转发给已在运行的实例
+tauri-plugin-single-instance = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
@@ -38,6 +40,28 @@ rusqlite = { version = "0.40", features = ["bundled"] }
 
 # 导出时格式化本地时间
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+
+# 读文本文件时识别 UTF-8 / UTF-16 / GBK（reqwest 已经间接依赖，这里只是显式声明）
+encoding_rs = "0.8"
+
+# 划词翻译：低级鼠标钩子、UI Automation 取词、剪贴板兜底、显示器工作区
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Accessibility",
+    "Win32_UI_HiDpi",
+    "Win32_Graphics_Gdi",
+    "Win32_System_Com",
+    "Win32_System_DataExchange",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_Ole",
+    "Win32_System_Threading",
+] }
+# 资源管理器右键菜单项写在 HKCU\Software\Classes，不需要管理员权限
+windows-registry = "0.6"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

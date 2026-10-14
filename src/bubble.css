@@ -1,0 +1,92 @@
+/* 划词悬浮图标。
+   窗口尺寸就是图标尺寸，所以页面不留任何边距；窗口是透明的，圆角外直接透出去。
+
+   造型：一枚「translate」小字标 + 底边一条四段彩虹条。
+   颜色全部来自 theme.css 的令牌，主界面换皮肤这里跟着换：
+   plain 是白底深字，meridian 是深色仪表屏 + 金色描边。
+
+   尺寸由 Rust 通过 --bubble-width / --bubble-height 注入，注入的是**逻辑像素**
+   （也就是 CSS 像素），所以这里的比例计算不需要再管 DPI。 */
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.bubble {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 彩虹条要贴着底边被裁成圆角形状，所以必须裁 */
+  overflow: hidden;
+
+  background: var(--bubble-bg);
+  color: var(--bubble-fg);
+  border: 1px solid var(--bubble-line);
+  border-radius: calc(var(--bubble-height, 30px) * var(--bubble-radius-factor, 0.5));
+  box-shadow:
+    0 4px 14px var(--shadow-color),
+    0 1px 0 var(--bubble-sheen) inset;
+
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.bubble__word {
+  font-family: var(--font-en, system-ui, sans-serif);
+  font-size: calc(var(--bubble-height, 30px) * 0.34);
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  line-height: 1;
+  /* 字标往上挪一点，给底部的彩虹条让位 */
+  padding-bottom: calc(var(--bubble-height, 30px) * 0.13);
+  white-space: nowrap;
+}
+
+.bubble__spectrum {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(var(--bubble-height, 30px) * 0.13);
+  display: flex;
+}
+
+.bubble__spectrum i {
+  height: 100%;
+}
+
+/* 蓝 40% / 橄榄 25% / 金 20% / 橙 15% —— 与主界面顶部条同一套比例 */
+.bubble__spectrum i:nth-child(1) { background: var(--stripe-1); width: 40%; }
+.bubble__spectrum i:nth-child(2) { background: var(--stripe-2); width: 25%; }
+.bubble__spectrum i:nth-child(3) { background: var(--stripe-3); width: 20%; }
+.bubble__spectrum i:nth-child(4) { background: var(--stripe-4); width: 15%; }
+
+/* 悬停只做很轻的抬升；这个窗口不抢焦点，hover 纯装饰，不承载任何功能 */
+.bubble:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 6px 18px var(--shadow-color),
+    0 0 0 3px var(--bubble-glow),
+    0 1px 0 var(--bubble-sheen) inset;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bubble {
+    transition: none;
+  }
+  .bubble:hover {
+    transform: none;
+  }
+}

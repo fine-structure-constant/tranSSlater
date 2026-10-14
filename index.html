@@ -118,6 +118,17 @@
               <button class="menu-item check" type="button" role="menuitemcheckbox" data-cmd="remember-window">
                 记住窗口大小
               </button>
+              <div class="menu-sep" role="separator"></div>
+              <div class="menu-label">划词</div>
+              <button class="menu-item check" type="button" role="menuitemcheckbox" data-cmd="select-translate">
+                划词翻译（划选后弹图标）
+              </button>
+              <button class="menu-item check" type="button" role="menuitemcheckbox" data-cmd="clipboard-fallback">
+                读不到选区时用剪贴板兜底
+              </button>
+              <button class="menu-item check" type="button" role="menuitemcheckbox" data-cmd="shell-menu">
+                资源管理器右键菜单
+              </button>
             </div>
           </div>
 
@@ -131,6 +142,9 @@
               </button>
               <button class="menu-item" type="button" role="menuitem" data-cmd="help" data-arg="engines">
                 引擎与数据来源…
+              </button>
+              <button class="menu-item" type="button" role="menuitem" data-cmd="help" data-arg="select">
+                划词翻译与右键菜单…
               </button>
               <button class="menu-item" type="button" role="menuitem" data-cmd="help" data-arg="keys">
                 快捷键…
@@ -363,6 +377,27 @@
               <span>记录翻译历史</span>
             </label>
           </div>
+
+          <div class="field">
+            <label class="row-label">
+              <input id="select-translate" type="checkbox" checked />
+              <span>划词翻译：划选文字后弹出 translate 小图标</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="row-label">
+              <input id="clipboard-fallback" type="checkbox" checked />
+              <span>读不到选区时改用剪贴板（会短暂占用剪贴板，读完还原）</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="row-label">
+              <input id="shell-menu" type="checkbox" checked />
+              <span>在资源管理器右键菜单里加入「翻译（translater）」</span>
+            </label>
+          </div>
         </div>
 
         <div class="dialog-foot">
@@ -403,6 +438,47 @@
               </table>
             </div>
             <ul class="help-list" id="help-engine-notes"></ul>
+          </section>
+
+          <section id="help-select">
+            <h3>划词翻译</h3>
+            <p>
+              在任意程序里拖选一段文字，松开鼠标后光标旁会浮出一枚 <b>translate</b> 小图标
+              （字标 + 一条四段彩虹条），点它就会把这段文字送进本窗口翻译。
+              <b>原文不会被替换，也不会被修改</b> —— 译文只出现在这里。
+            </p>
+            <table class="help-table keys">
+              <tbody>
+                <tr><th>拖选一段文字</th><td>松开鼠标后浮出图标</td></tr>
+                <tr><th>双击一个词</th><td>同上，方便查单词</td></tr>
+                <tr><th>点图标</th><td>窗口置顶并翻译选中内容</td></tr>
+                <tr><th>右键 / 滚轮 / 点别处</th><td>收起图标，不做任何事</td></tr>
+              </tbody>
+            </table>
+            <p>
+              取词优先走 Windows UI Automation，这是纯只读的，不会碰剪贴板；只有它读不到时，
+              才会退一步模拟 <kbd>Ctrl</kbd> + <kbd>C</kbd> 读剪贴板，读完把剪贴板原样还原。
+              在资源管理器里禁用这条兜底路径，免得选中若干文件时被误触发成「复制文件」。
+            </p>
+            <p>
+              <b>关于浏览器的右键菜单：</b>Chrome / Edge 的右键菜单是浏览器自己绘制的，
+              Windows 没有提供任何注册表或 Shell 扩展机制能往里加条目，唯一的正规途径是安装
+              浏览器扩展。所以这里采用「划词弹图标」的方式；资源管理器的右键菜单则可以注册，
+              见下节。
+            </p>
+          </section>
+
+          <section id="help-shell-menu">
+            <h3>资源管理器右键菜单</h3>
+            <p>
+              勾选「资源管理器右键菜单」后，在文件或文件夹上点右键会多出一项
+              <b>翻译（translater）</b>，选中文本文件即可把内容读进本窗口翻译。
+              支持 UTF-8、UTF-16 与 GBK 编码，超过 512 KB 的文件需要先截取一段。
+            </p>
+            <p>
+              这个菜单项写在 <code>HKCU\Software\Classes</code> 下，<b>只影响当前用户、不需要管理员权限</b>；
+              取消勾选就会整项删除。Windows 11 默认把它折叠进「显示更多选项」，这是系统行为。
+            </p>
           </section>
 
           <section id="help-keys">
