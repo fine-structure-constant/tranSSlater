@@ -129,7 +129,7 @@ fn engines(state: tauri::State<'_, AppState>) -> Vec<EngineInfo> {
     state.engines.list()
 }
 
-/// 翻译入口。`from` 省略时自动检测；`to` 省略时译为简体中文；
+/// 翻译入口。默认自动中英互译，其它语言译为中文；手动语言对保持原样。
 /// `engine` 省略时用设置里选定的引擎。
 #[tauri::command]
 async fn translate(
@@ -145,15 +145,16 @@ async fn translate(
     let engine_id = engine.unwrap_or(runtime.engine);
     let text = text.trim().to_string();
 
-    let driver = state.engines.get(&engine_id)?;
-    let key = CacheKey::new(&text, &from, &to, &engine_id);
+    let route = translate::routing::resolve(&text, &from, &to, &engine_id);
+    let driver = state.engines.get(route.engine)?;
+    let key = CacheKey::new(&text, route.from, route.to, route.engine);
 
     // 命中缓存直接返回。锁的作用域必须在 `.await` 之前结束。
     if let Some(hit) = state.cache.lock().expect("cache 锁中毒").get(&key) {
         return Ok(hit);
     }
 
-    let result = driver.translate(&text, &from, &to).await?;
+    let result = driver.translate(&text, route.from, route.to).await?;
 
     // 只有真正发过请求（未命中缓存）才记历史，避免同一会话里刷出重复条目。
     if runtime.record_history {

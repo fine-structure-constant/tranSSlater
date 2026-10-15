@@ -846,7 +846,7 @@ impl Driver for YoudaoDictDriver {
         EngineInfo {
             id: ID.into(),
             name: "有道词典".into(),
-            note: "国内直连，无需代理；柯林斯、专业释义、词源、词组短语、同根词最全，整句自动转翻译".into(),
+            note: "国内直连；有道系自动分流：单词查词典，句段直接用翻译；词典含柯林斯、专业释义等".into(),
             needs_proxy: false,
             supports_sentence: true,
             supports_dictionary: true,
@@ -874,7 +874,6 @@ impl Driver for YoudaoDictDriver {
         // 整句：jsonapi 不返回词典数据，改用翻译接口。
         let body = self.client.fallback.raw(text, from, to).await?;
         let mut result = YoudaoTransClient::extract(&body, text, to);
-        result.engine = ID.to_string();
         result.elapsed_ms = started.elapsed().as_millis() as u64;
         Ok(result)
     }

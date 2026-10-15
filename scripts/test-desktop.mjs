@@ -73,9 +73,13 @@ try {
   await main.reload();
   await main.waitForFunction(() => document.querySelector("#input")?.disabled === false);
   check(await main.title() === "tranSSlater", "main document and JavaScript load without Vite");
+  check(await main.locator('#lang-pair option[value="auto|zh-CN"]').innerText() === "自动中英互译",
+    "production UI exposes the automatic bilingual mode");
   const engines = await main.evaluate(() => window.__TAURI__.core.invoke("engines"));
   check(engines.map(engine => engine.id).join(",") === "google,youdao,youdaoTrans",
     "real backend IPC returns all three engines");
+  check(engines.filter(engine => engine.id.startsWith("youdao")).every(engine => engine.note.includes("自动分流")),
+    "production backend advertises routing on both Youdao entry points");
   const eventPayload = await main.evaluate(async () => {
     let receive;
     const delivered = new Promise(resolve => { receive = resolve; });

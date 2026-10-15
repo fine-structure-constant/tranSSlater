@@ -134,6 +134,7 @@ function fillEngineOptions(): void {
       const option = document.createElement("option");
       option.value = info.id;
       option.textContent = info.name;
+      option.title = info.note;
       select.appendChild(option);
     }
   }
@@ -474,7 +475,7 @@ function renderMeta(r: TranslateResult): void {
   if (langPair.value.startsWith("auto|")) {
     const s = document.createElement("span");
     s.className = "tag";
-    s.textContent = `检测到 ${langName(r.sourceLang)}`;
+    s.textContent = `${langName(r.sourceLang)} → ${langName(r.targetLang)}`;
     queryMeta.appendChild(s);
   }
   const engineTag = document.createElement("span");
@@ -542,7 +543,8 @@ $("btn-swap").addEventListener("click", () => {
     setStatus("请先翻译一次以检测源语言");
     return;
   }
-  const reversed = `${to}|${source}`;
+  const target = from === "auto" ? current?.targetLang ?? to : to;
+  const reversed = `${target}|${source}`;
   const option = Array.from(langPair.options).find((o) => o.value === reversed);
   if (option) {
     if (current) {

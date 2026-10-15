@@ -57,12 +57,22 @@ fn dump(r: &transslater_lib::translate::TranslateResult) {
 async fn live_hub_lists_all_engines() {
     let list = hub().list();
     let ids: Vec<&str> = list.iter().map(|e| e.id.as_str()).collect();
-    assert_eq!(ids, vec!["google", "youdao", "youdaoTrans"], "引擎顺序必须稳定");
+    assert_eq!(
+        ids,
+        vec!["google", "youdao", "youdaoTrans"],
+        "引擎顺序必须稳定"
+    );
 
     for e in &list {
         println!(
             "{} | {} | 代理={} 句子={} 词典={} 发音={} | {}",
-            e.id, e.name, e.needs_proxy, e.supports_sentence, e.supports_dictionary, e.supports_audio, e.note
+            e.id,
+            e.name,
+            e.needs_proxy,
+            e.supports_sentence,
+            e.supports_dictionary,
+            e.supports_audio,
+            e.note
         );
         assert!(!e.name.is_empty());
         assert!(!e.note.is_empty());
@@ -115,8 +125,14 @@ async fn live_youdao_dict_common_word_has_collins() {
     dump(&r);
 
     let keys: Vec<&str> = r.sections.iter().map(|s| s.key.as_str()).collect();
-    assert!(keys.contains(&"collins"), "常见词应有柯林斯板块，实际：{keys:?}");
-    assert!(keys.contains(&"discriminate"), "常见词应有词语辨析，实际：{keys:?}");
+    assert!(
+        keys.contains(&"collins"),
+        "常见词应有柯林斯板块，实际：{keys:?}"
+    );
+    assert!(
+        keys.contains(&"discriminate"),
+        "常见词应有词语辨析，实际：{keys:?}"
+    );
     assert!(keys.contains(&"etym"), "常见词应有词源，实际：{keys:?}");
     assert!(r.phonetic.is_some(), "应有美式音标");
     assert!(r.phonetic_uk.is_some(), "应有英式音标");
@@ -131,14 +147,64 @@ async fn live_youdao_dict_sentence() {
     let r = hub()
         .get("youdao")
         .unwrap()
-        .translate("The company was disruptive in its early years.", "en", "zh-CN")
+        .translate(
+            "The company was disruptive in its early years.",
+            "en",
+            "zh-CN",
+        )
         .await
         .expect("有道整句失败");
     dump(&r);
 
     assert!(!r.translation.is_empty(), "整句译文不应为空");
     assert!(!r.is_word, "整句不应被识别为单词");
+    assert_eq!(r.engine, "youdaoTrans", "词典兜底必须记录实际翻译引擎");
     assert!(r.dictionary.is_empty(), "整句不应有词典释义");
+}
+
+#[tokio::test]
+#[ignore = "需要联网访问有道"]
+async fn live_youdao_routed_bilingual() {
+    use transslater_lib::translate::routing;
+    let engines = hub();
+    for (text, target, actual_engine) in [
+        ("coercion", "zh-CN", "youdao"),
+        ("强迫", "en", "youdao"),
+        (
+            "今天的天气很好，我们一起去公园散步吧。",
+            "en",
+            "youdaoTrans",
+        ),
+        (
+            "Please translate this sentence into Chinese.",
+            "zh-CN",
+            "youdaoTrans",
+        ),
+        ("こんにちは", "zh-CN", "youdaoTrans"),
+    ] {
+        // The public demo endpoint can return empty results during request bursts.
+        // Both entry points share this effective request; only send it once.
+        tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+        let route = routing::resolve(text, "auto", "zh-CN", "youdao");
+        assert_eq!(
+            route,
+            routing::resolve(text, "auto", "zh-CN", "youdaoTrans")
+        );
+        assert_eq!(route.engine, actual_engine);
+        let result = engines
+            .get(route.engine)
+            .unwrap()
+            .translate(text, route.from, route.to)
+            .await
+            .unwrap();
+        assert_eq!(result.target_lang, target, "{text}");
+        assert_eq!(result.engine, actual_engine, "{text}");
+        assert!(!result.translation.trim().is_empty(), "{text}");
+        println!(
+            "{text} -> {} ({}, {})",
+            result.translation, result.target_lang, result.engine
+        );
+    }
 }
 
 // ── 有道翻译（aidemo）───────────────────────────────────────
@@ -148,7 +214,10 @@ async fn live_youdao_dict_sentence() {
 async fn live_youdao_trans_word_and_sentence() {
     let driver = hub().get("youdaoTrans").unwrap();
 
-    let word = driver.translate("coercion", "en", "zh-CN").await.expect("有道翻译失败");
+    let word = driver
+        .translate("coercion", "en", "zh-CN")
+        .await
+        .expect("有道翻译失败");
     dump(&word);
     assert_eq!(word.engine, "youdaoTrans");
     assert!(!word.translation.is_empty());
@@ -190,7 +259,11 @@ async fn live_google_sentence() {
     let r = hub()
         .get("google")
         .unwrap()
-        .translate("The company was disruptive in its early years.", "en", "zh-CN")
+        .translate(
+            "The company was disruptive in its early years.",
+            "en",
+            "zh-CN",
+        )
         .await
         .expect("Google 翻译失败");
     dump(&r);

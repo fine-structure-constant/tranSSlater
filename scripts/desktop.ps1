@@ -2,6 +2,7 @@ param(
     [ValidateSet('dev', 'build', 'test', 'check', 'smoke')]
     [string]$Action = 'dev',
     [switch]$NoBundle,
+    [string]$TestFilter = '',
     [ValidatePattern('^[A-Za-z0-9_-]+\.exe$')]
     [string]$ArtifactName = 'tranSSlater.exe'
 )
@@ -53,7 +54,11 @@ try {
     switch ($Action) {
         'test' { & cargo test --manifest-path src-tauri/Cargo.toml }
         'check' { & cargo check --manifest-path src-tauri/Cargo.toml }
-        'smoke' { & cargo test --manifest-path src-tauri/Cargo.toml --test live_google -- --ignored --nocapture --test-threads=1 }
+        'smoke' {
+            $testArgs = @('test', '--manifest-path', 'src-tauri/Cargo.toml', '--test', 'live_google')
+            if ($TestFilter) { $testArgs += $TestFilter }
+            & cargo @testArgs -- --ignored --nocapture --test-threads=1
+        }
         'dev' { & node node_modules/@tauri-apps/cli/tauri.js dev }
         'build' {
             if ($NoBundle) { & node node_modules/@tauri-apps/cli/tauri.js build --no-bundle --features tauri/custom-protocol }

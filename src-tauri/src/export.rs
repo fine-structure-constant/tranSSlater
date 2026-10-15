@@ -312,7 +312,10 @@ mod tests {
 
     fn render(format: Format) -> String {
         let store = seed();
-        let dir = std::env::temp_dir().join(format!("transslater-export-{}", std::process::id()));
+        // Parallel export tests must not delete one another's temporary directory.
+        static NEXT_EXPORT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let id = NEXT_EXPORT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("transslater-export-{}-{id}", std::process::id()));
         let path = dir.join(format!("out.{}", format.extension()));
         let n = write(&store, format, &path).unwrap();
         assert_eq!(n, 2);

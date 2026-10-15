@@ -387,6 +387,43 @@ try {
   check(await page.locator("#lang-pair").inputValue() === "zh-CN|en", "auto-detected language can be swapped");
   check(await page.locator("#input").inputValue() === "译文：new input", "swap uses prior translation as source");
 
+  // Routing is tested in Rust; this fixture verifies how resolved results reach the UI.
+  await page.evaluate(() => {
+    const invoke = window.__TAURI_INTERNALS__.invoke;
+    window.__TAURI_INTERNALS__.invoke = async (cmd, args) => {
+      const response = await invoke(cmd, args);
+      if (cmd === "translate" && args.text === "强迫" && args.from === "auto") {
+        return { ...response, sourceLang: "zh-CN", targetLang: "en", engine: "youdao", translation: "compel" };
+      }
+      if (cmd === "translate" && args.text === "This is a long paragraph.") {
+        return { ...response, sourceLang: "en", targetLang: "zh-CN", engine: "youdaoTrans" };
+      }
+      return response;
+    };
+  });
+  await page.locator("#input").press("Escape");
+  await page.locator("#lang-pair").selectOption("auto|zh-CN");
+  await page.locator("#engine").selectOption("youdaoTrans");
+  await page.locator("#input").fill("强迫");
+  await page.locator("#input").press("Control+Enter");
+  await page.waitForFunction(() => document.querySelector(".main-trans")?.textContent === "compel");
+  check((await page.locator("#query-meta").innerText()).includes("中文 → 英语"), "auto direction shows the actual Chinese-to-English result");
+  check((await page.locator("#query-meta").innerText()).includes("有道词典"), "a word routed from Youdao Translate displays the actual dictionary engine");
+  check(await page.locator("#engine").inputValue() === "youdaoTrans", "automatic routing preserves the selected Youdao preference");
+  await page.screenshot({ path: "test-results/automatic-routing-word.png" });
+  await page.locator("#btn-swap").click();
+  check(await page.locator("#lang-pair").inputValue() === "en|zh-CN", "Chinese auto translation swaps using the actual target, not the old Chinese target setting");
+  check(await page.locator("#input").inputValue() === "compel", "swapping a Chinese auto result uses the English translation");
+  await page.locator("#input").press("Escape");
+  await page.locator("#lang-pair").selectOption("auto|zh-CN");
+  await page.locator("#engine").selectOption("youdao");
+  await page.locator("#input").fill("This is a long paragraph.");
+  await page.locator("#input").press("Control+Enter");
+  await page.waitForFunction(() => document.querySelector("#query-meta")?.innerText.includes("有道翻译"));
+  check((await page.locator("#query-meta").innerText()).includes("英语 → 中文"), "auto English-to-Chinese direction is visible");
+  check(await page.locator("#engine").inputValue() === "youdao", "paragraph routing preserves the selected dictionary entry point");
+  await page.screenshot({ path: "test-results/automatic-routing-paragraph.png" });
+
   await page.locator("#input").fill("x".repeat(5001));
   await page.locator("#input").press("Control+Enter");
   check((await page.locator("#alert").innerText()).includes("5000"), "oversized text shows actionable validation");

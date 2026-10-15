@@ -80,6 +80,41 @@ pub fn direct_client(timeout_secs: u64) -> Result<reqwest::Client, TranslateErro
         .build()?)
 }
 
+/// A successful HTTP response may still contain a provider error or no translation.
+/// Reject it before cache/history insertion instead of presenting an empty success.
+fn validate_response(body: &Value) -> Result<(), TranslateError> {
+    let code = body
+        .get("errorCode")
+        .map(|value| {
+            value
+                .as_str()
+                .map(str::to_owned)
+                .unwrap_or_else(|| value.to_string())
+        })
+        .unwrap_or_else(|| "0".into());
+    if code != "0" {
+        let message = body
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or("有道翻译返回错误");
+        return Err(TranslateError::Parse(format!("{message}（错误码 {code}）")));
+    }
+    let has_translation = body
+        .get("translation")
+        .and_then(Value::as_array)
+        .is_some_and(|items| {
+            items
+                .iter()
+                .any(|item| item.as_str().is_some_and(|s| !s.trim().is_empty()))
+        });
+    if !has_translation {
+        return Err(TranslateError::Parse(
+            "有道翻译暂未返回译文，请稍后重试".into(),
+        ));
+    }
+    Ok(())
+}
+
 pub struct YoudaoTransClient {
     http: reqwest::Client,
 }
@@ -109,17 +144,7 @@ impl YoudaoTransClient {
             return Err(TranslateError::Status { status });
         }
         let body: Value = resp.json().await?;
-        let code = body
-            .get("errorCode")
-            .and_then(|v| v.as_str())
-            .unwrap_or("0");
-        if code != "0" {
-            let msg = body
-                .get("error")
-                .and_then(|v| v.as_str())
-                .unwrap_or("有道翻译返回错误");
-            return Err(TranslateError::Parse(format!("{msg}（错误码 {code}）")));
-        }
+        validate_response(&body)?;
         Ok(body)
     }
 
@@ -214,7 +239,7 @@ impl Driver for YoudaoTransDriver {
         EngineInfo {
             id: ID.into(),
             name: "有道翻译".into(),
-            note: "国内直连，无需代理；单词与整句都能翻，附带发音音频".into(),
+            note: "国内直连；有道系自动分流：单词查词典，句段直接用翻译；附带发音音频".into(),
             needs_proxy: false,
             supports_sentence: true,
             supports_dictionary: false,
@@ -245,6 +270,31 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn rejects_empty_results_and_numeric_provider_errors_before_caching() {
+        for body in [
+            json!({}),
+            json!({"errorCode":"0", "translation":[]}),
+            json!({"errorCode":0, "translation":[" ", null]}),
+        ] {
+            assert!(validate_response(&body).is_err());
+        }
+        for code in [json!(42), json!("42")] {
+            let body = json!({"errorCode":code, "translation":["should not be accepted"]});
+            assert!(
+                validate_response(&body)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("42")
+            );
+        }
+        assert!(validate_response(&json!({"errorCode":0, "translation":["有效译文"]})).is_ok());
+        assert!(
+            validate_response(&json!({"errorCode":"0", "translation":["valid translation"]}))
+                .is_ok()
+        );
+    }
+
+    #[test]
     fn maps_language_codes() {
         assert_eq!(to_youdao_lang("zh-CN"), Some("zh-CHS"));
         assert_eq!(to_youdao_lang("auto"), Some("auto"));
@@ -267,7 +317,10 @@ mod tests {
         assert_eq!(r.source_lang, "en");
         assert_eq!(r.engine, "youdaoTrans");
         assert_eq!(r.speak_url.as_deref(), Some("https://example.com/en.mp3"));
-        assert_eq!(r.target_speak_url.as_deref(), Some("https://example.com/zh.mp3"));
+        assert_eq!(
+            r.target_speak_url.as_deref(),
+            Some("https://example.com/zh.mp3")
+        );
         assert_eq!(r.segments.len(), 1);
         assert!(r.is_word, "单个词应标记为单词，前端据此自动朗读");
     }
@@ -279,7 +332,10 @@ mod tests {
         assert!(looks_like_word("强迫"));
 
         assert!(!looks_like_word("hello world"), "带空格按句子处理");
-        assert!(!looks_like_word("今天天气不错，我们出去走走吧。"), "带句读按句子处理");
+        assert!(
+            !looks_like_word("今天天气不错，我们出去走走吧。"),
+            "带句读按句子处理"
+        );
         assert!(!looks_like_word("What time is it?"));
         assert!(!looks_like_word(""));
         assert!(!looks_like_word(&"a".repeat(33)), "超长一律按句子处理");
