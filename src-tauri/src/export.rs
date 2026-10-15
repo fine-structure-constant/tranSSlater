@@ -312,7 +312,7 @@ mod tests {
 
     fn render(format: Format) -> String {
         let store = seed();
-        let dir = std::env::temp_dir().join(format!("translater-export-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("transslater-export-{}", std::process::id()));
         let path = dir.join(format!("out.{}", format.extension()));
         let n = write(&store, format, &path).unwrap();
         assert_eq!(n, 2);

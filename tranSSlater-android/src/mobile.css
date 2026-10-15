@@ -1,0 +1,36 @@
+/* Android viewport, touch targets and keyboard-safe scroll containers. */
+.app { height: 100dvh; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+button, select, input { touch-action: manipulation; }
+.content, .dialog-body, .drawer-list { overscroll-behavior: contain; }
+.drawer-hint, #history-msg, .dialog-body code { overflow-wrap: anywhere; }
+
+@media (max-width: 600px) {
+  .chrome { gap: 8px; padding: 8px 12px; }
+  .brand { flex: 1; }
+  .chrome-right { margin-left: 0; }
+  .menubar { order: 3; flex-basis: 100%; justify-content: space-between; }
+  .menu-btn, .menu-item { min-height: 44px; }
+  .menu-pop { position: fixed; top: auto; left: 12px; right: 12px; min-width: 0; max-height: min(65dvh, 520px); overflow-y: auto; }
+  .menu-pop.wide { min-width: 0; }
+  .toolbar { display: grid; grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1fr); gap: 8px; }
+  .toolbar > .select-wrap { min-width: 0; }
+  .toolbar select { width: 100%; min-width: 0; min-height: 44px; }
+  .toolbar > .spacer, .toolbar > .toolbar-sep { display: none; }
+  .toolbar > .hint { grid-column: 1 / -1; }
+  .icon-btn, .ghost-btn, .primary, .history-delete { min-width: 44px; min-height: 44px; }
+  .content { padding: 16px 12px 24px; }
+  .query-foot { flex-direction: column; align-items: stretch; }
+  .query-actions { justify-content: flex-end; flex-wrap: wrap; }
+  .tabs { gap: 16px; }
+  .tab { min-height: 44px; }
+  .mask { padding: 12px; }
+  .dialog, .dialog.wide { width: 100%; max-height: calc(100dvh - 24px); padding: 16px; }
+  .field select, .field input:not([type="checkbox"]) { min-height: 44px; font-size: max(16px, 1rem); }
+  .row-label { min-height: 44px; }
+  .drawer { width: 100%; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+  .drawer-head { align-items: center; flex-wrap: wrap; }
+  .drawer-tools { flex-wrap: wrap; }
+  .drawer-tools input[type="search"] { flex-basis: 100%; min-height: 44px; font-size: 16px; }
+  .drawer-tools select { flex: 1; min-height: 44px; }
+  .drawer-foot { flex-wrap: wrap; }
+}

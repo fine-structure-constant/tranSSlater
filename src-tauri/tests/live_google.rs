@@ -10,13 +10,13 @@
 //!
 //! 文件名为历史沿用（原项目只有 Google 一个引擎），现在覆盖全部驱动。
 
-use translater_lib::translate::EngineHub;
+use transslater_lib::translate::EngineHub;
 
 fn hub() -> EngineHub {
     EngineHub::new(None).expect("构建引擎表失败")
 }
 
-fn dump(r: &translater_lib::translate::TranslateResult) {
+fn dump(r: &transslater_lib::translate::TranslateResult) {
     println!("引擎      : {}", r.engine);
     println!("译文      : {}", r.translation);
     println!("源语言    : {}", r.source_lang);

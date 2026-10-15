@@ -752,7 +752,7 @@ try {
   const bubble = await browser.newPage({ viewport: { width: 120, height: 40 } });
   const bubbleErrors = [];
   bubble.on("pageerror", e => bubbleErrors.push(e.message));
-  await bubble.addInitScript(() => localStorage.setItem("translater.theme", "meridian"));
+  await bubble.addInitScript(() => localStorage.setItem("transslater.theme", "meridian"));
   await bubble.goto("http://127.0.0.1:1420/bubble.html");
   await bubble.waitForFunction(() => typeof window.__applyAppearance === "function");
   check(await bubble.locator(".bubble__word").innerText() === "translate",
@@ -797,7 +797,7 @@ try {
   check(parseFloat(bubbleStyle.letterSpacing) > 0.5, "the wordmark is letter-spaced, not cramped");
   await bubble.screenshot({ path: "test-results/bubble-plain.png" });
 
-  await bubble.evaluate(() => { localStorage.setItem("translater.theme", "meridian"); });
+  await bubble.evaluate(() => { localStorage.setItem("transslater.theme", "meridian"); });
   await bubble.reload();
   await bubble.waitForFunction(() => document.documentElement.dataset.theme === "meridian");
   // 重新注入一次尺寸：reload 之后 Rust 那边还没调过 __applyAppearance

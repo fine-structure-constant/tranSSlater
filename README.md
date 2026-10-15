@@ -1,12 +1,12 @@
-# Translater 桌面翻译器
+# tranSSlater 桌面翻译器
 
 Windows 桌面应用，使用 Tauri 2、Rust 与 TypeScript。两个可切换的界面皮肤、四档字号、可记住的窗口尺寸、菜单栏，三个可切换的翻译引擎、不限条数的本地历史库、四种格式的学习导出，词典释义、同义词、例句与朗读，以及在任意程序里划词取词的悬浮图标与资源管理器右键菜单。
 
 ## 直接运行
 
-双击 `artifacts/Translater.exe`。这个文件包含界面资源，不需要启动 Vite、Node.js 或 Rust。
+双击 `artifacts/tranSSlater.exe`。这个文件包含界面资源，不需要启动 Vite、Node.js 或 Rust。
 
-当前优化版使用 `artifacts/Translater.exe`；此前的满窗狂欢版保留在 `artifacts/Translater-party.exe` 供比较。两者共用已有设置与历史。构建脚本可通过 `-ArtifactName` 指定输出文件名。
+当前优化版使用 `artifacts/tranSSlater.exe`；此前的满窗狂欢版保留在 `artifacts/Translater-party.exe` 供比较。两者共用已有设置与历史。构建脚本可通过 `-ArtifactName` 指定输出文件名。
 
 运行环境需要 Microsoft Edge WebView2 Runtime（Windows 10/11 通常已安装）。
 
@@ -61,7 +61,7 @@ Windows 桌面应用，使用 Tauri 2、Rust 与 TypeScript。两个可切换的
 
 ### 资源管理器右键菜单
 
-在文件或文件夹上点右键会多出一项 **翻译（translater）**，选中文本文件即可把内容读进本窗口翻译。支持 UTF-8（含 BOM）、UTF-16 LE/BE 与 GBK 编码，单个文件上限 512 KB。
+在文件或文件夹上点右键会多出一项 **翻译（tranSSlater）**，选中文本文件即可把内容读进本窗口翻译。支持 UTF-8（含 BOM）、UTF-16 LE/BE 与 GBK 编码，单个文件上限 512 KB。
 
 菜单项写在 `HKCU\Software\Classes` 下（`*\shell\Translater` 与 `Directory\shell\Translater`），**只影响当前用户、不需要管理员权限**，取消勾选就整项删除。`MultiSelectModel=Single` 保证选中多个文件时只开一个窗口。Windows 11 默认把它折叠进「显示更多选项」，这是系统行为。
 
@@ -137,7 +137,7 @@ pnpm install
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/desktop.ps1 -Action build -NoBundle
 ```
 
-可执行文件会复制到 `artifacts/Translater.exe`。安装包位于构建缓存目录的 `release/bundle` 下。脚本会输出实际路径；没有配置其他目录时，默认使用 `src-tauri/target`，本机已有 D 盘项目缓存时会复用该目录。
+可执行文件会复制到 `artifacts/tranSSlater.exe`。安装包位于构建缓存目录的 `release/bundle` 下。脚本会输出实际路径；没有配置其他目录时，默认使用 `src-tauri/target`，本机已有 D 盘项目缓存时会复用该目录。
 
 不要直接把普通 `cargo build --release` 的输出当作正式版：Rust 的 release 优化并不代表 Tauri 已启用生产资源协议。缺少 `tauri/custom-protocol` 时，主窗口与划词悬浮窗口仍会连接 `127.0.0.1:1420`，关闭 Vite 后就会白屏、连接失败。构建脚本现在会拒绝这种 release 构建；上面的桌面构建入口会显式启用生产资源协议并先构建两个 HTML 入口。手动构建须先执行 `pnpm build`，再执行 `cargo build --manifest-path src-tauri/Cargo.toml --release --features tauri/custom-protocol`。
 
@@ -151,7 +151,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/desktop.ps1 -Act
 - 复制按钮复制完整译文。朗读优先播放引擎返回的 mp3（有道提供），没有音频时退回系统 SpeechSynthesis。
 - 一次最多翻译 5000 个 Unicode 字符；长文请分段。
 - 翻译结果缓存最长 24 小时，最多 2000 条，程序退出后清空。
-- 在别的程序里划词后点浮出的 translate 图标，或对文本文件用右键的「翻译（translater）」，选中内容会直接进输入框并立即翻译。
+- 在别的程序里划词后点浮出的 translate 图标，或对文本文件用右键的「翻译（tranSSlater）」，选中内容会直接进输入框并立即翻译。
 
 ## 设置文件
 

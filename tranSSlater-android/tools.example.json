@@ -1,0 +1,11 @@
+{
+  "nodeDir": "D:\\.ENV\\nodejs",
+  "rustDir": "D:\\.ENV\\Rust\\bin",
+  "msvcSetup": "D:\\.ENV\\MSVC\\setup_x64.bat",
+  "androidSdk": "D:\\.DevTOOLs\\Android\\Sdk",
+  "javaHome": "D:\\.ENV\\Java\\jdk-temurin-17.0.20.1",
+  "cargoTargetDir": "D:\\.ENV\\cargo-target\\transslater-android",
+  "gradleHome": "D:\\.ENV\\gradle-home",
+  "gradleProxyHost": "",
+  "gradleProxyPort": 7890
+}

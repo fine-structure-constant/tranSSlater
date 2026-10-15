@@ -1,0 +1,501 @@
+/* ============================================================
+   阶段二新增样式：引擎选择、历史抽屉、新增词典板块。
+   基础变量与布局在 styles.css，这里只做增量。
+   ============================================================ */
+
+/* ── 引擎选择 ──────────────────────────────────────────────── */
+
+.engine-pick {
+  appearance: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg);
+  padding: 5px 26px 5px 10px;
+  font-size: calc(13px * var(--fs));
+  color: var(--text);
+  cursor: pointer;
+  outline: none;
+}
+
+.engine-pick:hover {
+  border-color: var(--border-hover);
+}
+
+.engine-pick:focus {
+  border-color: var(--accent);
+}
+
+.engine-note {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: calc(12px * var(--fs));
+  color: var(--text-3);
+}
+
+/* ── 标签栏：板块变多后需要横向滚动 ────────────────────────── */
+
+.tabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding-bottom: 2px;
+}
+
+.tabs::-webkit-scrollbar {
+  height: 5px;
+}
+
+.tabs::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: var(--border-strong);
+}
+
+.tab {
+  flex: 0 0 auto;
+}
+
+/* ── 词性行 + 考试标签 + 组释义 ────────────────────────────── */
+
+.dict-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.exam {
+  border-radius: 4px;
+  background: var(--bg-hover);
+  padding: 0 5px;
+  font-family: var(--font-en);
+  font-size: calc(11px * var(--fs));
+  color: var(--text-3);
+}
+
+.gloss {
+  font-size: calc(12.5px * var(--fs));
+  color: var(--text-3);
+}
+
+/* ── 词组短语 ──────────────────────────────────────────────── */
+
+.phrase-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.phrase-item {
+  display: grid;
+  grid-template-columns: minmax(140px, 38%) 1fr;
+  gap: 4px 14px;
+  padding: 7px 8px;
+  border-radius: 7px;
+}
+
+.phrase-item:hover {
+  background: var(--bg-soft);
+}
+
+.phrase-term {
+  border: none;
+  background: none;
+  padding: 0;
+  text-align: left;
+  font-family: var(--font-en);
+  font-size: calc(14.5px * var(--fs));
+  color: var(--link);
+}
+
+.phrase-term:hover {
+  text-decoration: underline;
+}
+
+.phrase-tran {
+  font-size: calc(14px * var(--fs));
+  color: var(--text-2);
+}
+
+.phrase-item .ex-source {
+  grid-column: 2;
+}
+
+/* ── 同根词 ────────────────────────────────────────────────── */
+
+.chip.rel {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.rel-word {
+  font-family: var(--font-en);
+}
+
+.rel-gloss {
+  font-family: var(--font);
+  font-size: calc(12px * var(--fs));
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+
+.chip.rel:hover .rel-gloss {
+  color: var(--accent);
+}
+
+/* ── 例句：译文与出处 ──────────────────────────────────────── */
+
+.example-item.plain {
+  display: block;
+}
+
+.example-body {
+  min-width: 0;
+}
+
+.ex-text {
+  font-family: var(--font-en);
+  font-size: calc(15.5px * var(--fs));
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.ex-text b {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.ex-tran {
+  margin-top: 2px;
+  font-size: calc(14px * var(--fs));
+  line-height: 1.65;
+  color: var(--text-2);
+}
+
+.ex-source {
+  margin-top: 2px;
+  font-size: calc(12px * var(--fs));
+  color: var(--text-3);
+}
+
+/* ── 通用板块（柯林斯 / 专业释义 / 网络释义 / 辨析 / 词源 / AI） ── */
+
+.section-note {
+  margin: 0 0 16px;
+  font-size: calc(12.5px * var(--fs));
+  line-height: 1.6;
+  color: var(--text-3);
+}
+
+.sec-group {
+  margin-bottom: 22px;
+}
+
+.sec-group:last-child {
+  margin-bottom: 0;
+}
+
+.sec-group > .pos {
+  font-family: var(--font-en);
+  font-style: italic;
+  font-size: calc(13px * var(--fs));
+  color: var(--text-3);
+  margin-bottom: 8px;
+}
+
+.sec-item {
+  margin-bottom: 14px;
+}
+
+.sec-item:last-child {
+  margin-bottom: 0;
+}
+
+.sec-text {
+  font-family: var(--font-en);
+  font-size: calc(15px * var(--fs));
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.sec-tran {
+  margin-top: 2px;
+  font-size: calc(14px * var(--fs));
+  line-height: 1.65;
+  color: var(--text-2);
+}
+
+.sec-note {
+  margin-top: 3px;
+  font-size: calc(12px * var(--fs));
+  color: var(--text-3);
+}
+
+/* 词源这类整段文本要保留换行 */
+.pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: calc(14px * var(--fs));
+  line-height: 1.75;
+  color: var(--text-2);
+}
+
+/* AI 释义的迷你 Markdown 输出 */
+.md h4 {
+  margin: 14px 0 6px;
+  font-size: calc(14px * var(--fs));
+  font-weight: 600;
+  color: var(--text);
+}
+
+.md h4:first-child {
+  margin-top: 0;
+}
+
+.md p {
+  margin: 0 0 8px;
+  font-size: calc(14.5px * var(--fs));
+  line-height: 1.75;
+  color: var(--text-2);
+}
+
+.md ul {
+  margin: 0 0 10px;
+  padding-left: 20px;
+}
+
+.md li {
+  margin-bottom: 3px;
+  font-size: calc(14.5px * var(--fs));
+  line-height: 1.7;
+  color: var(--text-2);
+}
+
+.md b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.md code {
+  border-radius: 4px;
+  background: var(--bg-soft);
+  padding: 1px 5px;
+  font-family: var(--font-en);
+  font-size: calc(13px * var(--fs));
+}
+
+/* ── 历史抽屉 ──────────────────────────────────────────────── */
+
+.drawer-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: var(--overlay-soft);
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 41;
+  display: flex;
+  flex-direction: column;
+  width: min(460px, 100vw);
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+  box-shadow: -12px 0 40px var(--shadow-color-soft);
+  animation: drawer-in 0.18s ease-out;
+}
+
+@keyframes drawer-in {
+  from { transform: translateX(24px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+.drawer-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.drawer-head h2 {
+  margin: 0;
+  font-size: calc(15px * var(--fs));
+  font-weight: 600;
+}
+
+.drawer-stat {
+  flex: 1;
+  font-size: calc(12px * var(--fs));
+  color: var(--text-3);
+}
+
+.drawer-tools {
+  display: flex;
+  gap: 6px;
+  padding: 12px 16px 6px;
+}
+
+.drawer-tools input[type="search"] {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: calc(13px * var(--fs));
+  outline: none;
+}
+
+.drawer-tools input[type="search"]:focus {
+  border-color: var(--accent);
+}
+
+.drawer-tools select {
+  appearance: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg);
+  padding: 6px 10px;
+  font-size: calc(13px * var(--fs));
+  cursor: pointer;
+  outline: none;
+}
+
+.primary.sm,
+.ghost-btn.sm {
+  padding: 6px 12px;
+  font-size: calc(13px * var(--fs));
+}
+
+.ghost-btn.danger {
+  color: var(--danger);
+}
+
+.ghost-btn.danger:hover {
+  background: var(--danger-soft);
+}
+
+.drawer-hint {
+  margin: 0;
+  padding: 0 16px 8px;
+  font-size: calc(12px * var(--fs));
+  color: var(--text-3);
+}
+
+.drawer-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 10px 10px;
+}
+
+.drawer-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.drawer-list::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: var(--border-strong);
+}
+
+.history-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  padding: 9px 10px;
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.history-item:hover {
+  background: var(--bg-soft);
+}
+
+.history-item .hi-query {
+  font-family: var(--font-en);
+  font-size: calc(14.5px * var(--fs));
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-item .hi-trans {
+  grid-column: 1;
+  font-size: calc(13.5px * var(--fs));
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-item .hi-meta {
+  grid-column: 1;
+  display: flex;
+  gap: 8px;
+  font-size: calc(11.5px * var(--fs));
+  color: var(--text-3);
+}
+
+.history-item .hi-actions {
+  grid-row: 1 / span 3;
+  grid-column: 2;
+  align-self: center;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.history-item:hover .hi-actions,
+.history-item:focus-within .hi-actions {
+  opacity: 1;
+}
+
+.hi-del {
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  width: 26px;
+  height: 26px;
+  color: var(--text-3);
+  font-size: calc(15px * var(--fs));
+  line-height: 1;
+}
+
+.hi-del:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.history-empty {
+  padding: 40px 16px;
+  text-align: center;
+  font-size: calc(13.5px * var(--fs));
+  color: var(--text-3);
+}
+
+.drawer-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.drawer-foot .hint {
+  margin: 0;
+}
+
+@media (max-width: 760px) {
+  .engine-note {
+    display: none;
+  }
+}

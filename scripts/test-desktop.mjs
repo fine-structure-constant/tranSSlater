@@ -7,7 +7,7 @@ import net from "node:net";
 import path from "node:path";
 import { chromium } from "playwright";
 
-const executable = path.resolve(process.argv[2] ?? "artifacts/Translater.exe");
+const executable = path.resolve(process.argv[2] ?? "artifacts/tranSSlater.exe");
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const viteRunning = await new Promise(resolve => {
   const socket = net.connect(1420, "127.0.0.1");
@@ -72,7 +72,7 @@ try {
   // Observe a fresh document load as well as startup.
   await main.reload();
   await main.waitForFunction(() => document.querySelector("#input")?.disabled === false);
-  check(await main.title() === "Translater", "main document and JavaScript load without Vite");
+  check(await main.title() === "tranSSlater", "main document and JavaScript load without Vite");
   const engines = await main.evaluate(() => window.__TAURI__.core.invoke("engines"));
   check(engines.map(engine => engine.id).join(",") === "google,youdao,youdaoTrans",
     "real backend IPC returns all three engines");

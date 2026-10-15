@@ -41,7 +41,7 @@ fn ensure(app: &AppHandle) -> Result<WebviewWindow, String> {
     }
 
     let window = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("bubble.html".into()))
-        .title("Translater 划词")
+        .title("tranSSlater 划词")
         .inner_size(WIDTH, HEIGHT)
         .decorations(false)
         .transparent(true)

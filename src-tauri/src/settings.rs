@@ -60,7 +60,7 @@ pub struct Settings {
     pub select_translate: bool,
     /// UI Automation 读不到选区时，是否允许退到「模拟 Ctrl+C 读剪贴板」
     pub clipboard_fallback: bool,
-    /// 是否在资源管理器右键菜单里注册「翻译（translater）」
+    /// 是否在资源管理器右键菜单里注册「翻译（tranSSlater）」
     pub shell_menu: bool,
 }
 
@@ -330,7 +330,7 @@ mod tests {
     #[test]
     fn file_roundtrip_and_rejection_preserves_valid_settings() {
         let folder =
-            std::env::temp_dir().join(format!("translater-settings-test-{}", std::process::id()));
+            std::env::temp_dir().join(format!("transslater-settings-test-{}", std::process::id()));
         let path = folder.join("settings.json");
         let mut s = load(&path, &engines()).unwrap();
         s.auto_speak = true;

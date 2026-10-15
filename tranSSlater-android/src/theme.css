@@ -1,0 +1,276 @@
+/* ============================================================
+   theme.css — 设计令牌与皮肤
+   ------------------------------------------------------------
+   所有颜色、圆角、阴影都走 CSS 变量，皮肤只覆盖变量，不碰布局。
+   新增皮肤：写一个 :root[data-theme="x"] 块，并在
+   src-tauri/src/settings.rs 的 THEMES 里登记（否则保存会被拒绝）。
+
+   装饰元素（彩虹条、螺钉）由皮肤显式开启，见文件末尾。
+   ============================================================ */
+
+:root {
+  /* 字号系数。[data-font] 覆盖，所有 font-size 都乘它。 */
+  --fs: 1;
+
+  /* 字体族与主题无关，放在这里 */
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI",
+    "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC",
+    sans-serif;
+  --font-en: "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue",
+    Arial, sans-serif;
+  --font-mono: Consolas, "Cascadia Mono", "Courier New", monospace;
+
+  /* 区块标题的排印风格：plain 是普通中文，meridian 是工程小标签 */
+  --label-spacing: 0;
+
+  /* 品牌四段彩虹条。蓝 40% / 橄榄 25% / 金 20% / 橙 15%。
+     这是品牌元素而不是皮肤元素：主界面的顶部条只在 meridian 显示，
+     但划词悬浮图标在两套皮肤下都要用，所以放在 :root。 */
+  --stripe-1: #4c6370;
+  --stripe-2: #83886a;
+  --stripe-3: #c7a467;
+  --stripe-4: #c74c2d;
+}
+
+/* ── 字号档位 ─────────────────────────────────────────────── */
+
+:root[data-font="sm"] { --fs: 0.875; }
+:root[data-font="md"] { --fs: 1; }
+:root[data-font="lg"] { --fs: 1.125; }
+:root[data-font="xl"] { --fs: 1.25; }
+
+/* ── 皮肤：plain（默认，素净的浅色）────────────────────────── */
+
+:root[data-theme="plain"] {
+  --bg: #ffffff;
+  --bg-soft: #f7f8fa;
+  --bg-hover: #f0f1f3;
+  --bg-active: #e6e8eb;
+  --surface: #ffffff;
+
+  --border: #e8eaed;
+  --border-strong: #d9dce1;
+  --border-hover: #c2c7cd;
+
+  --text: #1f2328;
+  --text-2: #4a5057;
+  --text-3: #626973;
+  --text-4: #c4c9cf;
+
+  --accent: #e8503a;
+  --accent-strong: #d8402a;
+  --accent-soft: #fdece9;
+  --accent-line: #f3b4a9;
+  --accent-glow: rgba(232, 80, 58, 0.07);
+  --on-accent: #ffffff;
+  --link: #2f6fd0;
+  --ok: #2f8a4c;
+
+  --danger: #c0392b;
+  --danger-bg: #fef6f5;
+  --danger-soft: #fdeceb;
+  --danger-line: #f5c2c0;
+  --danger-text: #a3311f;
+
+  --scroll-thumb: #d6d9de;
+  --scroll-thumb-hover: #bcc1c8;
+  --skeleton-1: #f2f3f5;
+  --skeleton-2: #e9ebee;
+
+  --overlay: rgba(24, 27, 31, 0.35);
+  --overlay-soft: rgba(24, 27, 31, 0.25);
+  --shadow-color: rgba(0, 0, 0, 0.18);
+  --shadow-color-soft: rgba(0, 0, 0, 0.1);
+  --shadow-dialog: 0 18px 50px var(--shadow-color);
+
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-sm: 8px;
+
+  /* 输入卡片：plain 下就是一张普通白卡片 */
+  --input-bg: #ffffff;
+  --input-text: #1f2328;
+  --input-placeholder: #6d747c;
+  --input-border: #e8eaed;
+  --input-border-focus: #f3b4a9;
+  --input-shadow-focus: 0 0 0 3px var(--accent-glow);
+  --input-meta: #626973;
+  --input-meta-strong: #4a5057;
+  --input-tag-line: #d9dce1;
+  --input-icon: #4a5057;
+  --input-icon-hover-bg: #f0f1f3;
+  --input-icon-hover: #1f2328;
+
+  --chrome-bg: #ffffff;
+  --chrome-line: #e8eaed;
+
+  /* 划词悬浮图标：浅色胶囊 + 底部彩虹条，白底上的干净版本 */
+  --bubble-bg: #ffffff;
+  --bubble-fg: #1f2328;
+  --bubble-line: #e2e5e9;
+  --bubble-sheen: rgba(255, 255, 255, 0.9);
+  --bubble-glow: rgba(232, 80, 58, 0.22);
+  --bubble-radius-factor: 0.5;
+
+  /* 皮肤不启用任何装饰件 */
+  --deco: none;
+}
+
+/* ── 皮肤：meridian（远点计划 · 奶油工业面板 + 深色仪表屏）─────
+   取自 concept/meridian：纸白设备面板、四段彩虹条、
+   近直角的设备边、螺钉、等宽小标签、橙色只用在动作上。
+   ---------------------------------------------------------- */
+
+:root[data-theme="meridian"] {
+  --bg: #eae7de;
+  --bg-soft: #e2dfd4;
+  --bg-hover: #dcded2;
+  --bg-active: #d3d5c8;
+  --surface: #f2f0e8;
+
+  --border: #c6c8bb;
+  --border-strong: #aaaea0;
+  --border-hover: #93978c;
+
+  --text: #272d2b;
+  --text-2: #4c544f;
+  --text-3: #6b7067;
+  --text-4: #a8aa9f;
+
+  --accent: #c74c2d;
+  --accent-strong: #a93c21;
+  --accent-soft: #e6d9cd;
+  --accent-line: #d98a6f;
+  --accent-glow: rgba(199, 76, 45, 0.14);
+  --on-accent: #fff9ed;
+  --link: #395b76;
+  --ok: #526349;
+
+  --danger: #a53d25;
+  --danger-bg: #f4e3dc;
+  --danger-soft: #ecd8d0;
+  --danger-line: #d9a795;
+  --danger-text: #8a3220;
+
+  --scroll-thumb: #b3b5a8;
+  --scroll-thumb-hover: #93978c;
+  --skeleton-1: #e2dfd4;
+  --skeleton-2: #d3d5c8;
+
+  --overlay: rgba(17, 31, 35, 0.42);
+  --overlay-soft: rgba(17, 31, 35, 0.3);
+  --shadow-color: rgba(60, 71, 51, 0.22);
+  --shadow-color-soft: rgba(60, 71, 51, 0.12);
+  --shadow-dialog: 0 18px 45px var(--shadow-color);
+
+  /* 设备边几乎直角 */
+  --radius: 3px;
+  --radius-lg: 5px;
+  --radius-sm: 2px;
+
+  /* 输入卡片 = 深色仪表屏 */
+  --input-bg: #111f23;
+  --input-text: #e6e8dd;
+  --input-placeholder: #8b9a95;
+  --input-border: #111f23;
+  --input-border-focus: #c7a467;
+  --input-shadow-focus: 0 0 0 3px rgba(199, 164, 103, 0.2);
+  --input-meta: #a1afaa;
+  --input-meta-strong: #cad2c8;
+  --input-tag-line: #46565a;
+  --input-icon: #a1afaa;
+  --input-icon-hover-bg: #253234;
+  --input-icon-hover: #e6e8dd;
+
+  --chrome-bg: #eae7de;
+  --chrome-line: #aaaea0;
+
+  /* 划词悬浮图标：深色仪表屏 + 底部彩虹条，和输入卡片同一种「凹陷屏」语言。
+     圆角接近直角，跟设备面板一致。 */
+  --bubble-bg: #111f23;
+  --bubble-fg: #e6e8dd;
+  --bubble-line: rgba(199, 164, 103, 0.4);
+  --bubble-sheen: rgba(255, 255, 255, 0.07);
+  --bubble-glow: rgba(199, 164, 103, 0.34);
+  --bubble-radius-factor: 0.18;
+
+  --deco: block;
+}
+
+/* ── 皮肤装饰件 ─────────────────────────────────────────────
+   只在 meridian 显示：顶部彩虹条 + 四角螺钉 + 品牌四段小条。
+   ---------------------------------------------------------- */
+
+.spectrum,
+.frame-screws,
+.brand-mark {
+  display: none;
+}
+
+:root[data-theme="meridian"] .spectrum {
+  display: flex;
+}
+
+:root[data-theme="meridian"] .frame-screws,
+:root[data-theme="meridian"] .brand-mark {
+  display: block;
+}
+
+/* 顶部彩虹条：蓝 40% / 橄榄 25% / 金 20% / 橙 15% */
+.spectrum {
+  height: 6px;
+  flex: none;
+}
+
+.spectrum i:nth-child(1) { background: var(--stripe-1); width: 40%; }
+.spectrum i:nth-child(2) { background: var(--stripe-2); width: 25%; }
+.spectrum i:nth-child(3) { background: var(--stripe-3); width: 20%; }
+.spectrum i:nth-child(4) { background: var(--stripe-4); width: 15%; }
+
+/* 四角螺钉 */
+.frame-screws span {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border: 1px solid #9b9f92;
+  border-radius: 50%;
+  background: #d3d4c8;
+  z-index: 60;
+  pointer-events: none;
+}
+
+.frame-screws span::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 0;
+  width: 5px;
+  height: 1px;
+  background: #9b9f92;
+  transform: rotate(-45deg);
+}
+
+.frame-screws .tl { left: 9px; top: 15px; }
+.frame-screws .tr { right: 9px; top: 15px; }
+.frame-screws .bl { left: 9px; bottom: 9px; }
+.frame-screws .br { right: 9px; bottom: 9px; }
+
+/* 品牌标记：四根竖条 */
+.brand-mark {
+  width: 22px;
+  height: 15px;
+  flex: none;
+  position: relative;
+}
+
+.brand-mark i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+}
+
+.brand-mark i:nth-child(1) { left: 0; background: var(--stripe-1); }
+.brand-mark i:nth-child(2) { left: 6px; background: var(--stripe-2); }
+.brand-mark i:nth-child(3) { left: 12px; background: var(--stripe-3); }
+.brand-mark i:nth-child(4) { left: 18px; background: var(--stripe-4); }

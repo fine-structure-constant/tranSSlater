@@ -3,7 +3,7 @@ param(
     [string]$Action = 'dev',
     [switch]$NoBundle,
     [ValidatePattern('^[A-Za-z0-9_-]+\.exe$')]
-    [string]$ArtifactName = 'Translater.exe'
+    [string]$ArtifactName = 'tranSSlater.exe'
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
@@ -64,11 +64,11 @@ try {
     if ($resultCode -ne 0) { throw "The $Action command failed (exit $resultCode). See the error above." }
     if ($Action -eq 'build') {
         $targetDir = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $projectRoot 'src-tauri\target' }
-        Write-Host "Executable: $targetDir\release\translater.exe"
+        Write-Host "Executable: $targetDir\release\transslater.exe"
         Write-Host "Installers: $targetDir\release\bundle"
         $artifactDir = Join-Path $projectRoot 'artifacts'
         New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
-        Copy-Item -LiteralPath (Join-Path $targetDir 'release\translater.exe') -Destination (Join-Path $artifactDir $ArtifactName) -Force
+        Copy-Item -LiteralPath (Join-Path $targetDir 'release\transslater.exe') -Destination (Join-Path $artifactDir $ArtifactName) -Force
         Write-Host "Ready to run: $artifactDir\$ArtifactName"
     }
     exit 0

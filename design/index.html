@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Translater 实现与验证</title><style>body{font:16px/1.7 system-ui,sans-serif;color:#242830;max-width:1000px;margin:40px auto;padding:0 24px}table{border-collapse:collapse;width:100%;display:block;overflow-x:auto}th,td{padding:12px;text-align:left;border-bottom:1px solid #ddd}a{color:#245bb8}code{background:#f3f4f6;padding:2px 5px}img{max-width:100%;border:1px solid #ddd}h2{margin-top:2em}</style></head><body>
-<h1>Translater 实现与验证</h1>
+<h1>tranSSlater 实现与验证</h1>
+<section id="android-branding"><h2>2026-10-15 · tranSSlater 与 Android</h2><p>REQ-A1 requested：重命名并使用自设计的彩虹条图标；REQ-A2 requested：在当前目录建立 Android 工程；REQ-A3 clarified：Android 移除划词与窗口尺寸功能，保留无限历史功能即可，无需迁移现有桌面历史。</p><p>桌面实现 verified：<a href="../artifacts/tranSSlater.exe">新版 EXE</a>已构建，9 项真实 EXE 回归 passed；保持原应用标识与数据目录。图标母版已查看。Android Release APK 已完成构建、v2/v3 签名与 16 KB 对齐验证，44 项 Rust 和 48 项移动界面检查 passed；未连接真机。详细状态见<a href="../tranSSlater-android/design/index.html">Android 设计与验证记录</a>。</p></section>
 <section id="selection-startup-fix">
 <h2>2026-10-14 · 划词版本白屏与连接失败修复</h2>
 <p>当前基线 bfab89f；检查时已有划词功能等未提交改动，全部保留。REQ-004（requested）：定位、汇报并修复编译后白屏与连接失败，保留现有界面和划词交互。验收：关闭 Vite 后正式 EXE 的主窗口与悬浮窗口正常加载，真实后端 IPC 可用，退出后无隐藏窗口残留。</p>

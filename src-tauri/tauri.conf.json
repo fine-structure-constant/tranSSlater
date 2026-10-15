@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "translater",
+  "productName": "tranSSlater",
   "version": "0.1.0",
   "identifier": "com.tauri-app.translater",
   "build": {
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Translater",
+        "title": "tranSSlater",
         "width": 1020,
         "height": 760,
         "minWidth": 720,

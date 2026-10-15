@@ -24,7 +24,7 @@ export interface Settings {
   selectTranslate: boolean;
   /** UI Automation 读不到选区时，是否退到「模拟 Ctrl+C 读剪贴板」 */
   clipboardFallback: boolean;
-  /** 是否在资源管理器右键菜单里注册「翻译（translater）」 */
+  /** 是否在资源管理器右键菜单里注册「翻译（tranSSlater）」 */
   shellMenu: boolean;
 }
 
@@ -72,14 +72,14 @@ export const DEFAULTS: Settings = {
 };
 
 /** 主窗口与划词悬浮图标共用的皮肤键，写在 localStorage 里做首帧兜底。 */
-export const THEME_STORAGE_KEY = "translater.theme";
+export const THEME_STORAGE_KEY = "transslater.theme";
 
 let pendingSave: Promise<void> = Promise.resolve();
 
 export async function loadSettings(): Promise<Settings> {
   if (isTauri()) return invoke<Settings>("load_settings");
   try {
-    const raw = JSON.parse(localStorage.getItem("translater.settings") ?? "{}");
+    const raw = JSON.parse(localStorage.getItem("transslater.settings") ?? "{}");
     return { ...DEFAULTS, ...raw };
   } catch {
     return { ...DEFAULTS };
@@ -90,7 +90,7 @@ export function saveSettings(settings: Settings): Promise<void> {
   const snapshot = { ...settings };
   const task = pendingSave.catch(() => {}).then(async () => {
     if (isTauri()) await invoke("save_settings", { settings: snapshot });
-    else localStorage.setItem("translater.settings", JSON.stringify(snapshot));
+    else localStorage.setItem("transslater.settings", JSON.stringify(snapshot));
   });
   pendingSave = task;
   return task;
@@ -129,7 +129,7 @@ export const EXPORT_FORMATS: { id: ExportFormat; label: string; ext: string; hin
   { id: "json", label: "JSON 备份", ext: "json", hint: "含完整结果，用于备份或二次处理" },
 ];
 
-/** 生成默认文件名，形如 `translater-history-20261012-1400.csv`。 */
+/** 生成默认文件名，形如 `transslater-history-20261012-1400.csv`。 */
 export function defaultExportName(format: ExportFormat): string {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, "0");
@@ -137,5 +137,5 @@ export function defaultExportName(format: ExportFormat): string {
     `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}` +
     `-${p(d.getHours())}${p(d.getMinutes())}`;
   const ext = EXPORT_FORMATS.find((f) => f.id === format)?.ext ?? "txt";
-  return `translater-history-${stamp}.${ext}`;
+  return `transslater-history-${stamp}.${ext}`;
 }

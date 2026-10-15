@@ -9,8 +9,10 @@
 use std::path::Path;
 
 /// 菜单上显示的文字。加后缀是为了和系统自带项区分开。
-pub const LABEL: &str = "翻译（translater）";
+pub const LABEL: &str = "翻译（tranSSlater）";
 
+// 注册表键名保持 `Translater` 不变：改了键名会在用户机器上留下一条孤儿项，
+// 结果就是右键菜单里出现两个「翻译」。
 const FILE_BASE: &str = r"Software\Classes\*\shell\Translater";
 const DIR_BASE: &str = r"Software\Classes\Directory\shell\Translater";
 
@@ -79,7 +81,7 @@ mod tests {
 
     #[test]
     fn label_is_distinguishable_from_system_entries() {
-        assert!(LABEL.contains("translater"));
+        assert!(LABEL.contains("tranSSlater"));
         assert_ne!(LABEL, "翻译");
     }
 

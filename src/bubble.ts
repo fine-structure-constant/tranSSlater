@@ -11,7 +11,7 @@
  */
 
 /** 与 `src/main.ts` 共用。Rust 的 eval 要等窗口建好才到，先用它兜第一帧，避免白闪。 */
-const THEME_KEY = "translater.theme";
+const THEME_KEY = "transslater.theme";
 
 type BubbleWindow = Window & {
   __applyAppearance?: (theme: string, width: number, height: number) => void;

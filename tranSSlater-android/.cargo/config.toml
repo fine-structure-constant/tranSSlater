@@ -1,0 +1,17 @@
+# 安卓交叉编译必须补的一个 cfg。
+#
+# 背景：indexmap 1.9.3 的 build.rs 用 autocfg 探测「目标端有没有 std」。宿主 = 目标时探测
+# 通过，会发出 `cargo:rustc-cfg=has_std`；但交叉编译到 android 时这个探针返回否，indexmap
+# 于是按 no_std 编译 —— 而它的 `IndexMap<K, V>` 只在 `has_std` 下才带默认的
+# `S = RandomState` 参数。上层 schemars 0.8 的 `preserve_order` 特性（由 tauri-utils 的
+# build-2 打开，来源是 tauri-build）用的正是两参数的 `IndexMap<K, V>`，于是依赖链断在
+# schemars 上，报 E0107。
+#
+# 直接把这个 cfg 补上即可。已核对过整个依赖树：只有 indexmap 1.9.3 读 `has_std`，
+# 其它 crate 都不引用这个名字，所以没有附带影响。
+#
+# 注：试过用 `indexmap = { features = ["std"] }` 让它的 build.rs 跳过探测，无效 ——
+# schemars 位于 tauri-build 的 build-dependencies 子图，与根 crate 的普通依赖不共享
+# 特性解析单元，加在 [dependencies] 里传不过去。
+[build]
+rustflags = ["--cfg", "has_std"]
