@@ -324,7 +324,7 @@ fn apply_settings(
     selection::set_clipboard_fallback(s.clipboard_fallback);
     selection::set_appearance(&s.theme, s.font_scale());
     if s.select_translate {
-        selection::prewarm(app.clone());
+        selection::prewarm();
     } else {
         selection::destroy_bubble(app);
     }
@@ -481,7 +481,7 @@ pub fn run() {
                 eprintln!("划词模块初始化失败：{err}");
             }
             if loaded.select_translate {
-                selection::prewarm(handle.clone());
+                selection::prewarm();
             }
 
             app.manage(state);

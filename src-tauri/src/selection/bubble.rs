@@ -52,6 +52,8 @@ fn ensure(app: &AppHandle) -> Result<WebviewWindow, String> {
         .skip_taskbar(true)
         .always_on_top(true)
         .focusable(false)
+        // focusable 只约束原生窗口；WebView2 默认仍会 MoveFocus，打断中文输入法。
+        .focused(false)
         .visible(false)
         .build()
         .map_err(|e| format!("悬浮图标窗口创建失败：{e}"))?;
@@ -170,26 +172,11 @@ pub fn destroy(app: &AppHandle) {
     }
 }
 
-/// 启动一小会儿之后预热一下图标窗口，免得第一次划词时还要等 WebView2 起来。
-/// 放在后台线程里，不拖慢启动；窗口已经建好了就直接返回。
-pub fn prewarm(app: AppHandle) {
-    if app.get_webview_window(LABEL).is_some() {
-        return;
+/// 仅由划词工作线程调用；隐藏 WebView 可以加载 HTML，无需先显示一帧。
+pub fn prewarm(app: &AppHandle) {
+    if let Err(err) = ensure(app) {
+        eprintln!("{err}");
     }
-    std::thread::Builder::new()
-        .name("bubble-prewarm".into())
-        .spawn(move || {
-            std::thread::sleep(std::time::Duration::from_millis(1500));
-            if !super::enabled() || app.get_webview_window(LABEL).is_some() {
-                return;
-            }
-            if let Ok(window) = ensure(&app) {
-                // 显示一帧再藏起来，WebView2 才真正完成首帧渲染
-                let _ = window.show();
-                let _ = window.hide();
-            }
-        })
-        .ok();
 }
 
 /// 光标所在显示器的工作区（物理像素）与该显示器的缩放系数。

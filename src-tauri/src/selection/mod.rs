@@ -29,6 +29,8 @@ pub const MAX_SELECTION_CHARS: usize = 5000;
 
 /// 工作线程收到的任务。
 enum Job {
+    /// 在同一工作线程内创建隐藏窗口，避免启动与设置加载并发创建。
+    Prewarm,
     /// 一次划词手势结束，参数是光标的物理坐标。
     Gesture(i32, i32),
     /// 收起悬浮图标。
@@ -121,12 +123,11 @@ pub fn enabled() -> bool {
     shared().is_some_and(|s| s.enabled.load(Ordering::SeqCst))
 }
 
-/// 启动一小会儿之后预热悬浮图标窗口，免得第一次划词时还要等 WebView2 起来。
-pub fn prewarm(app: AppHandle) {
-    #[cfg(windows)]
-    bubble::prewarm(app);
-    #[cfg(not(windows))]
-    let _ = app;
+/// 与划词任务共用单一工作线程，启动时即创建隐藏窗口，不延时显示/隐藏。
+pub fn prewarm() {
+    if let Some(s) = shared() {
+        let _ = s.tx.send(Job::Prewarm);
+    }
 }
 
 /// 关掉划词功能时销毁图标窗口，省下一个 WebView2 进程。
@@ -207,6 +208,12 @@ fn worker(rx: Receiver<Job>) {
     for job in rx {
         let Some(s) = shared() else { continue };
         match job {
+            Job::Prewarm => {
+                #[cfg(windows)]
+                if s.enabled.load(Ordering::SeqCst) {
+                    bubble::prewarm(&s.app);
+                }
+            }
             Job::Gesture(x, y) => on_gesture(s, x, y),
             Job::Hide => hide_now(s),
             Job::Accept => on_accept(s),

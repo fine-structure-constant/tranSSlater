@@ -25,6 +25,7 @@ const port = portServer.address().port;
 await new Promise(resolve => portServer.close(resolve));
 await mkdir("test-results", { recursive: true });
 
+const launchedAt = Date.now();
 const child = spawn(executable, [], {
   windowsHide: true,
   env: {
@@ -69,6 +70,55 @@ try {
     `main loads embedded production assets (${main.url()})`);
   const errors = [];
   main.on("pageerror", error => errors.push(error.message));
+  // Exercise the first document across delayed bubble creation. Reloading first
+  // used to hide startup regressions that discard a draft entered immediately.
+  let startupNavigations = 0;
+  main.on("framenavigated", frame => {
+    if (frame === main.mainFrame()) startupNavigations++;
+  });
+  await main.waitForFunction(() => document.querySelector("#input")?.disabled === false);
+  const draft = "启动后立即输入的内容 startup draft";
+  const documentToken = await main.evaluate(() => {
+    window.__startupDocumentToken = crypto.randomUUID();
+    // Keep this lifecycle test independent of the user's engine/network/history.
+    const invoke = window.__TAURI_INTERNALS__.invoke;
+    window.__TAURI_INTERNALS__.invoke = (cmd, args, ...rest) =>
+      cmd === "translate" ? new Promise(() => {}) : invoke(cmd, args, ...rest);
+    return window.__startupDocumentToken;
+  });
+  await main.locator("#input").fill(draft);
+  check(await main.evaluate(() => document.hasFocus()), "main input has focus before IME composition");
+  const cdp = await context.newCDPSession(main);
+  await main.evaluate(() => {
+    window.__startupCompositionEnds = 0;
+    window.__startupInputBlurs = 0;
+    const input = document.querySelector("#input");
+    input.addEventListener("compositionend", () => window.__startupCompositionEnds++);
+    input.addEventListener("blur", () => window.__startupInputBlurs++);
+  });
+  const preedit = "中文候选未确认";
+  await cdp.send("Input.imeSetComposition", {
+    text: preedit, selectionStart: preedit.length, selectionEnd: preedit.length,
+  });
+  const composingDraft = await main.locator("#input").inputValue();
+  check(composingDraft.includes(preedit), "Chinese IME preedit is active before background initialization");
+  console.log(`Startup draft entered ${Date.now() - launchedAt} ms after process launch.`);
+  await delay(4000);
+  check(await main.evaluate(token => window.__startupDocumentToken === token, documentToken)
+      && startupNavigations === 0,
+    "initial main document survives delayed selection-window creation without reloading");
+  check(await main.locator("#input").inputValue() === composingDraft,
+    "unconfirmed Chinese preedit survives startup background work");
+  const inputState = await main.evaluate(() => ({
+    compositionEnds: window.__startupCompositionEnds,
+    blurs: window.__startupInputBlurs,
+    focused: document.hasFocus(),
+  }));
+  check(inputState.compositionEnds === 0 && inputState.blurs === 0 && inputState.focused,
+    `startup keeps input focus and does not cancel the IME composition (${JSON.stringify(inputState)})`);
+  await main.screenshot({ path: "test-results/startup-ime.png" });
+  await cdp.send("Input.insertText", { text: preedit });
+  await cdp.detach();
   // Observe a fresh document load as well as startup.
   await main.reload();
   await main.waitForFunction(() => document.querySelector("#input")?.disabled === false);
@@ -114,6 +164,8 @@ try {
     }
     check(/^https?:\/\/tauri\.localhost\//.test(bubble.url()),
       `bubble loads embedded production assets (${bubble.url()})`);
+    check(await bubble.evaluate(() => window.__TAURI__.window.getCurrentWindow().isVisible()) === false,
+      "prewarmed selection window remains hidden");
     bubble.on("pageerror", error => errors.push(error.message));
     await bubble.reload();
     await bubble.waitForFunction(() => typeof window.__applyAppearance === "function");
