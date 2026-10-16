@@ -232,24 +232,36 @@ fn on_gesture(s: &Shared, x: i32, y: i32) {
     #[cfg(windows)]
     {
         // 在本程序自己的窗口里划词没有意义
-        if hook::window_belongs_to_us(x, y) {
+        if hook::window_belongs_to_us(x, y) || hook::foreground_belongs_to_us() {
+            hide_now(s);
             return;
         }
 
         // 松手那一刻目标程序可能还没把选区提交给 UI Automation，等一下再问
         std::thread::sleep(std::time::Duration::from_millis(45));
 
+        // 排队或等待选区提交期间可能切回了输入框，不能对它读取/模拟 Ctrl+C。
+        if hook::window_belongs_to_us(x, y) || hook::foreground_belongs_to_us() {
+            hide_now(s);
+            return;
+        }
+
         let mut text = uia::read_selection(Some((x, y))).unwrap_or_default();
 
         if text.trim().is_empty()
             && s.clipboard_fallback.load(Ordering::SeqCst)
             && !hook::foreground_is_explorer()
+            && !hook::foreground_belongs_to_us()
         {
             text = clipboard::read_selection_via_copy().unwrap_or_default();
         }
 
         let text = text.trim();
-        if text.is_empty() {
+        if text.is_empty()
+            || !s.enabled.load(Ordering::SeqCst)
+            || hook::window_belongs_to_us(x, y)
+            || hook::foreground_belongs_to_us()
+        {
             hide_now(s);
             return;
         }

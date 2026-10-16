@@ -119,6 +119,28 @@ try {
   await main.screenshot({ path: "test-results/startup-ime.png" });
   await cdp.send("Input.insertText", { text: preedit });
   await cdp.detach();
+  // Editing a selection inside our own WebView must remain possible with the
+  // real selection service enabled. Global-hook ownership cases have Rust tests.
+  const editText = "保留 开发测试文本 继续";
+  await main.locator("#input").fill(editText);
+  await main.locator("#input").press("Home");
+  for (let i = 0; i < 3; i++) await main.locator("#input").press("ArrowRight");
+  for (let i = 0; i < 6; i++) await main.locator("#input").press("Shift+ArrowRight");
+  await delay(700);
+  check(await main.evaluate(() => {
+    const input = document.querySelector("#input");
+    return document.hasFocus() && document.activeElement === input
+      && input.selectionStart === 3 && input.selectionEnd === 9;
+  }), "partial text selection inside the input keeps focus and its selection");
+  const selectionBubble = context.pages().find(page => page.url().endsWith("/bubble.html"));
+  if (selectionBubble) {
+    check(await selectionBubble.evaluate(() => window.__TAURI__.window.getCurrentWindow().isVisible()) === false,
+      "selecting text inside the dictionary does not display the selection bubble");
+  }
+  await main.screenshot({ path: "test-results/internal-selection.png" });
+  await main.locator("#input").press("Backspace");
+  check(await main.locator("#input").inputValue() === "保留  继续",
+    "Backspace deletes only the selected segment inside the dictionary input");
   // Observe a fresh document load as well as startup.
   await main.reload();
   await main.waitForFunction(() => document.querySelector("#input")?.disabled === false);

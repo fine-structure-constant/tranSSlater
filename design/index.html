@@ -1,6 +1,12 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Translater 实现与验证</title><style>body{font:16px/1.7 system-ui,sans-serif;color:#242830;max-width:1000px;margin:40px auto;padding:0 24px}table{border-collapse:collapse;width:100%;display:block;overflow-x:auto}th,td{padding:12px;text-align:left;border-bottom:1px solid #ddd}a{color:#245bb8}code{background:#f3f4f6;padding:2px 5px}img{max-width:100%;border:1px solid #ddd}h2{margin-top:2em}</style></head><body>
 <h1>tranSSlater 实现与验证</h1>
+<section id="internal-selection"><h2>2026-10-16 · 应用内选词删除被划词窗口干扰</h2>
+<p>REQ-S2 requested：在词典输入栏选中一段文本后可直接删除，不弹出划词悬浮窗口、不转移焦点。本次基线 92615df，工作区在上一项修复基础上为干净状态。</p>
+<p>诊断：原有 WindowFromPoint 判断仅比较最内层 HWND 的 PID；WebView2 子窗口可能由独立渲染进程持有，遗漏其宿主是本应用的情况。DEC-S2 proposed / implemented：同时识别 GA_ROOTOWNER 宿主窗口；鼠标按下时记住是否从应用内开始，拖到窗外也不触发；取词排队、UI Automation 等待后、剪贴板兜底前及显示前重新排除应用前台，避免处理已过期的外部手势。</p>
+<p>IMP-S2 verified：<a href="../src-tauri/src/selection/hook.rs">窗口归属与手势起点</a>、<a href="../src-tauri/src/selection/mod.rs">工作线程复查</a>。Rust 83 项 passed（新增跨进程 WebView 宿主、应用内拖选／双击与外部双击回归）；前端类型检查、生产构建与正式 EXE 编译 passed。用户关闭占用文件的旧实例后，原 artifacts/tranSSlater.exe 已替换。</p>
+<p><a href="../test-results/internal-selection-after.log">真实 EXE 20 项检查 passed</a>：输入框局部选中保持焦点与选区、悬浮窗口保持隐藏、Backspace 只删除选中部分；上一轮中文组合输入、真实 IPC、悬浮页资源与退出回归仍通过。<a href="../test-results/internal-selection.png">implementation capture · 局部选中且无悬浮窗口</a>已查看。桌面选区通过 WebView 键盘事件设置；全局钩子的真实手动鼠标拖选往返仍为 manual check remaining，不把键盘测试当作全局鼠标钩子的端到端证明。</p>
+<p><a href="../artifacts/tranSSlater.exe">最新正式 EXE</a>：7,777,792 字节；SHA256：235A214C9BACEE4FD744E2F3C9314AF6D6A68D54BAAA237415F51B6923BD21F1。修复与自动回归完成，无待定设计决策。</p></section>
 <section id="startup-ime"><h2>2026-10-16 · 启动时中文输入法中断</h2>
 <p>REQ-S1 requested / clarified：Windows 正式 EXE 打开后约 1 秒出现类似刷新，中文输入法尚未确认的候选内容消失。验收：首次启动即输入中文，后台初始化期间输入焦点与组合输入保持连续。基线 75cc7b1，工作区原为干净状态；本次范围为桌面启动生命周期。</p>
 <p>已复现：真实旧 EXE 在约 0.7 秒启动组合输入，随后收到一次非用户触发的 compositionend；主页面文档标记与导航次数保持不变，实际不是页面重新加载。根因：悬浮窗口仅设置 focusable(false)，没有设置 focused(false)，底层 WebView2 创建时默认调用 MoveFocus，打断输入法。另有 setup 与 load_settings 同时触发的延迟预热线程，并包含显示后立即隐藏窗口的操作。</p>

@@ -12,7 +12,7 @@
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use windows::Win32::Foundation::{CloseHandle, HANDLE, HINSTANCE, LPARAM, LRESULT, POINT, WPARAM};
+use windows::Win32::Foundation::{CloseHandle, HANDLE, HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::{
     GetCurrentProcessId, GetCurrentThreadId, OpenProcess, QueryFullProcessImageNameW,
@@ -20,10 +20,10 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::GetDoubleClickTime;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, DispatchMessageW, GetForegroundWindow, GetMessageW, GetWindowThreadProcessId,
+    CallNextHookEx, DispatchMessageW, GetAncestor, GetForegroundWindow, GetMessageW, GetWindowThreadProcessId,
     PM_NOREMOVE, PeekMessageW, PostThreadMessageW, SetWindowsHookExW, TranslateMessage,
     UnhookWindowsHookEx, WindowFromPoint, LLMHF_INJECTED, MSG, MSLLHOOKSTRUCT, WH_MOUSE_LL,
-    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MOUSEWHEEL, WM_QUIT, WM_RBUTTONDOWN,
+    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MOUSEWHEEL, WM_QUIT, WM_RBUTTONDOWN, GA_ROOTOWNER,
 };
 use windows::core::PWSTR;
 
@@ -49,6 +49,8 @@ struct Gesture {
     /// 已经吞掉了按下事件，配套的抬起事件也要吞掉，否则目标程序会收到一个孤立的
     /// mouse-up。
     swallow_up: bool,
+    /// 从应用自身开始的拖选，即使松手时鼠标已移出窗口也不能触发划词。
+    started_in_app: bool,
 }
 
 static GESTURE: Mutex<Gesture> = Mutex::new(Gesture {
@@ -58,6 +60,7 @@ static GESTURE: Mutex<Gesture> = Mutex::new(Gesture {
     last_down_time: 0,
     double: false,
     swallow_up: false,
+    started_in_app: false,
 });
 
 /// 钩子线程 id。`stop()` 靠它投递 `WM_QUIT`；0 表示线程没在跑。
@@ -159,19 +162,20 @@ unsafe extern "system" fn proc_(code: i32, wparam: WPARAM, lparam: LPARAM) -> LR
                     post_hide();
                 }
 
-                g.double = is_double_click(&g, info.pt, info.time);
+                g.started_in_app = window_belongs_to_us(info.pt.x, info.pt.y);
+                g.double = !g.started_in_app && is_double_click(&g, info.pt, info.time);
 
                 g.down = info.pt;
                 g.down_time = info.time;
                 g.last_down = info.pt;
-                g.last_down_time = info.time;
+                g.last_down_time = if g.started_in_app { 0 } else { info.time };
             }
 
             WM_LBUTTONUP => {
                 if g.swallow_up {
                     g.swallow_up = false;
                     swallow = true;
-                } else if g.double || is_drag(&g, info.pt, info.time) {
+                } else if should_capture_gesture(&g, info.pt, info.time) {
                     post_gesture(info.pt.x, info.pt.y);
                 }
                 g.double = false;
@@ -214,19 +218,43 @@ fn is_drag(g: &Gesture, pt: POINT, time: u32) -> bool {
     (dx > DRAG_MIN_PX || dy > DRAG_MIN_PX) && dt >= DRAG_MIN_MS
 }
 
+fn should_capture_gesture(g: &Gesture, pt: POINT, time: u32) -> bool {
+    !g.started_in_app && (g.double || is_drag(g, pt, time))
+}
+
 // ── 前台窗口查询 ────────────────────────────────────────────
 
 /// 指定坐标下的窗口是不是本程序自己的。在自己窗口里划词不需要翻译。
 pub fn window_belongs_to_us(x: i32, y: i32) -> bool {
-    unsafe {
-        let hwnd = WindowFromPoint(POINT { x, y });
-        if hwnd.is_invalid() {
-            return false;
-        }
-        let mut pid = 0u32;
-        GetWindowThreadProcessId(hwnd, Some(&mut pid));
-        pid != 0 && pid == GetCurrentProcessId()
+    belongs_to_us(unsafe { WindowFromPoint(POINT { x, y }) })
+}
+
+/// WebView2 的子 HWND 可属于独立渲染进程；应以宿主根窗口的归属为准。
+fn belongs_to_us(hwnd: HWND) -> bool {
+    if hwnd.is_invalid() {
+        return false;
     }
+    unsafe {
+        let root = GetAncestor(hwnd, GA_ROOTOWNER);
+        belongs_to_process(window_pid(hwnd), window_pid(root), GetCurrentProcessId())
+    }
+}
+
+fn window_pid(hwnd: HWND) -> u32 {
+    if hwnd.is_invalid() {
+        return 0;
+    }
+    let mut pid = 0;
+    unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
+    pid
+}
+
+fn belongs_to_process(window_pid: u32, host_pid: u32, app_pid: u32) -> bool {
+    app_pid != 0 && (window_pid == app_pid || host_pid == app_pid)
+}
+
+pub fn foreground_belongs_to_us() -> bool {
+    belongs_to_us(unsafe { GetForegroundWindow() })
 }
 
 /// 前台窗口是不是资源管理器。
@@ -326,5 +354,25 @@ mod tests {
         // GetTickCount 大约 49.7 天回绕一次，回绕瞬间不能溢出
         let g = gesture(POINT { x: 0, y: 0 }, u32::MAX - 10);
         assert!(is_drag(&g, POINT { x: 100, y: 0 }, 100));
+    }
+
+    #[test]
+    fn hosted_webview_is_ours_even_with_a_separate_renderer_process() {
+        assert!(belongs_to_process(200, 100, 100));
+        assert!(belongs_to_process(100, 100, 100));
+        assert!(!belongs_to_process(200, 300, 100));
+        assert!(!belongs_to_process(0, 0, 100));
+    }
+
+    #[test]
+    fn editing_gestures_that_start_in_the_app_are_never_captured() {
+        let mut g = gesture(POINT { x: 100, y: 100 }, 1_000);
+        g.started_in_app = true;
+        // 拖到窗外与双击选词都仍然是应用内编辑操作。
+        assert!(!should_capture_gesture(&g, POINT { x: 800, y: 100 }, 1_200));
+        g.double = true;
+        assert!(!should_capture_gesture(&g, POINT { x: 100, y: 100 }, 1_200));
+        g.started_in_app = false;
+        assert!(should_capture_gesture(&g, POINT { x: 100, y: 100 }, 1_200));
     }
 }
