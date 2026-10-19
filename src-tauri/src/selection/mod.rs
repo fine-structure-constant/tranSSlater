@@ -1,7 +1,7 @@
 //! 划词翻译。
 //!
 //! 数据流：全局低级鼠标钩子识别「划词」手势 → 工作线程读取选区文字（优先 UI
-//! Automation，失败才回退到模拟 Ctrl+C 读剪贴板）→ 光标旁浮出小图标 → 点击
+//! Automation，读不到或来自 PDF 时模拟 Ctrl+C 读剪贴板）→ 光标旁浮出小图标 → 点击
 //! 图标把文字交给主窗口翻译。
 //!
 //! 两条硬约束：
@@ -231,8 +231,14 @@ fn on_gesture(s: &Shared, x: i32, y: i32) {
 
     #[cfg(windows)]
     {
+        use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+
+        let source_window = unsafe { GetForegroundWindow() };
         // 在本程序自己的窗口里划词没有意义
-        if hook::window_belongs_to_us(x, y) || hook::foreground_belongs_to_us() {
+        if source_window.is_invalid()
+            || hook::window_belongs_to_us(x, y)
+            || hook::foreground_belongs_to_us()
+        {
             hide_now(s);
             return;
         }
@@ -241,24 +247,28 @@ fn on_gesture(s: &Shared, x: i32, y: i32) {
         std::thread::sleep(std::time::Duration::from_millis(45));
 
         // 排队或等待选区提交期间可能切回了输入框，不能对它读取/模拟 Ctrl+C。
-        if hook::window_belongs_to_us(x, y) || hook::foreground_belongs_to_us() {
+        if unsafe { GetForegroundWindow() } != source_window
+            || hook::window_belongs_to_us(x, y)
+            || hook::foreground_belongs_to_us()
+        {
             hide_now(s);
             return;
         }
 
-        let mut text = uia::read_selection(Some((x, y))).unwrap_or_default();
-
-        if text.trim().is_empty()
-            && s.clipboard_fallback.load(Ordering::SeqCst)
+        let selection = uia::read_selection(Some((x, y)));
+        let can_copy = s.clipboard_fallback.load(Ordering::SeqCst)
+            && s.enabled.load(Ordering::SeqCst)
+            && unsafe { GetForegroundWindow() } == source_window
             && !hook::foreground_is_explorer()
-            && !hook::foreground_belongs_to_us()
-        {
-            text = clipboard::read_selection_via_copy().unwrap_or_default();
-        }
+            && !hook::foreground_belongs_to_us();
+        let text = selection
+            .into_text(can_copy, || clipboard::read_selection_via_copy(source_window))
+            .unwrap_or_default();
 
         let text = text.trim();
         if text.is_empty()
             || !s.enabled.load(Ordering::SeqCst)
+            || unsafe { GetForegroundWindow() } != source_window
             || hook::window_belongs_to_us(x, y)
             || hook::foreground_belongs_to_us()
         {

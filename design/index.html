@@ -1,6 +1,13 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Translater 实现与验证</title><style>body{font:16px/1.7 system-ui,sans-serif;color:#242830;max-width:1000px;margin:40px auto;padding:0 24px}table{border-collapse:collapse;width:100%;display:block;overflow-x:auto}th,td{padding:12px;text-align:left;border-bottom:1px solid #ddd}a{color:#245bb8}code{background:#f3f4f6;padding:2px 5px}img{max-width:100%;border:1px solid #ddd}h2{margin-top:2em}</style></head><body>
 <h1>tranSSlater 实现与验证</h1>
+<section id="pdf-selection"><h2>2026-10-19 · Edge PDF 划词结果随换行偏移</h2>
+<p>REQ-P1 requested：PDF 中双击或拖选 advocate 应取得 advocate；用户确认 Edge 中 Ctrl+C 正确，而划词接口返回 te too a，段落首行通常正常。普通网页保持现有取词方式。</p>
+<p>诊断：现有流程无条件接受 UI Automation 非空结果。微软支持论坛有同类 Edge Acrobat PDF 选区偏移报告。独立 Edge 本地 PDF 测试窗口观察到：选中文字的祖先中有 Chrome 框架的 Document，名称为 PDF Document；不依赖文件名或网页标题猜测文件类型。</p>
+<p>DEC-P1 implemented：在返回文字前检查焦点与鼠标位置的文档祖先，识别 PDF 后走已有 Ctrl+C 及剪贴板快照还原；复制失败或用户关闭剪贴板兜底时不采用已知不可靠的 PDF UIA 文字。普通网页非空 UIA 结果直接返回。取词期间与发 Ctrl+C 前后检查前台窗口，切换窗口时放弃结果。菜单、帮助及配置说明同步更新。</p>
+<p>IMP-P1 verified：Rust 88 项 passed（新增 PDF 错误非空结果改用实际复制、禁用／失败不返回偏移结果、普通网页不复制、PDF 标识与文件名区分）；类型检查、Vite 及正式 EXE 构建 passed。真实 Edge 本地样本已确认 PDF 文档祖先标识；自动桌面鼠标／复制链路未通过，不作为取词端到端成功证据。用户 Oresteia 原 PDF 仅有截图，仍需在原阅读环境验收双击与拖选。</p>
+<p><a href="../test-results/pdf-ui.log">界面 174 项</a>与<a href="../test-results/pdf-desktop.log">正式 EXE 20 项</a> passed；后者覆盖未确认的中文输入法组合内容、输入框局部选中及删除、隐藏窗口不抢焦点和无 Vite 独立启动。交付 artifacts/tranSSlater.exe（7,780,352 字节，SHA-256 7C6DA77AEA431D432A6BB7B58186E61A0AFEAE722D5F2BF84AFC154664E07263）。诊断参考：<a href="https://learn.microsoft.com/zh-cn/answers/questions/2389577/edge-adobe-acrobat-pdf">微软支持论坛的同类 Edge PDF 无障碍选区偏移报告</a>。</p>
+</section>
 <section id="internal-selection"><h2>2026-10-16 · 应用内选词删除被划词窗口干扰</h2>
 <p>REQ-S2 requested：在词典输入栏选中一段文本后可直接删除，不弹出划词悬浮窗口、不转移焦点。本次基线 92615df，工作区在上一项修复基础上为干净状态。</p>
 <p>诊断：原有 WindowFromPoint 判断仅比较最内层 HWND 的 PID；WebView2 子窗口可能由独立渲染进程持有，遗漏其宿主是本应用的情况。DEC-S2 proposed / implemented：同时识别 GA_ROOTOWNER 宿主窗口；鼠标按下时记住是否从应用内开始，拖到窗外也不触发；取词排队、UI Automation 等待后、剪贴板兜底前及显示前重新排除应用前台，避免处理已过期的外部手势。</p>

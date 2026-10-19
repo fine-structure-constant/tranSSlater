@@ -40,6 +40,8 @@ Windows 桌面应用，使用 Tauri 2、Rust 与 TypeScript。两个可切换的
 
 本应用内的选词与编辑操作不会触发划词图标；包括 WebView2 输入框内的拖选、双击选词，以及从应用内开始后拖出窗口的选择。
 
+普通网页和应用优先使用 UI Automation 只读选区。Edge 的 Acrobat PDF 接口可能返回非空但偏移的文字，因此检测到 PDF 文档后改用 Ctrl+C 读取实际选区并还原剪贴板；不按字符偏移猜测。关闭「剪贴板兜底」或复制失败时，PDF 不显示划词图标。识别依据是选区所在的 PDF 文档节点，不使用 `.pdf` 文件名或正文中的 PDF 字样。取词期间切换前台窗口会放弃本次结果。
+
 | 操作 | 结果 |
 | --- | --- |
 | 拖选一段文字 | 松开鼠标后浮出图标（需拖出 6px 且超过 60ms，避免和单击混淆） |
@@ -187,7 +189,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/desktop.ps1 -Act
 }
 ```
 
-`selectTranslate` 控制划词取词（全局鼠标钩子），`clipboardFallback` 控制读不到 UI Automation 时是否用剪贴板兜底，`shellMenu` 控制资源管理器右键菜单是否注册。
+`selectTranslate` 控制划词取词（全局鼠标钩子），`clipboardFallback` 控制 UI Automation 读不到或 PDF 选区不可靠时是否允许复制取词，`shellMenu` 控制资源管理器右键菜单是否注册。
 
 `shellMenu` 只是意图，**界面上的勾选状态以注册表实际内容为准**：启动时会重新查一次注册表，你若在别处删掉了菜单项，勾会自动落下，避免显示与实际不符。
 

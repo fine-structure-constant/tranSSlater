@@ -58,7 +58,7 @@ pub struct Settings {
     pub remember_window: bool,
     /// 划词翻译总开关：划选文字后是否弹出悬浮图标
     pub select_translate: bool,
-    /// UI Automation 读不到选区时，是否允许退到「模拟 Ctrl+C 读剪贴板」
+    /// UI Automation 读不到或 PDF 选区不可靠时，是否允许模拟 Ctrl+C 取词
     pub clipboard_fallback: bool,
     /// 是否在资源管理器右键菜单里注册「翻译（tranSSlater）」
     pub shell_menu: bool,

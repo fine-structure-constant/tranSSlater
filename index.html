@@ -124,7 +124,7 @@
                 划词翻译（划选后弹图标）
               </button>
               <button class="menu-item check" type="button" role="menuitemcheckbox" data-cmd="clipboard-fallback">
-                读不到选区时用剪贴板兜底
+                读不到选区或 PDF 时用剪贴板兜底
               </button>
               <button class="menu-item check" type="button" role="menuitemcheckbox" data-cmd="shell-menu">
                 资源管理器右键菜单
@@ -456,8 +456,9 @@
               </tbody>
             </table>
             <p>
-              取词优先走 Windows UI Automation，这是纯只读的，不会碰剪贴板；只有它读不到时，
-              才会退一步模拟 <kbd>Ctrl</kbd> + <kbd>C</kbd> 读剪贴板，读完把剪贴板原样还原。
+              普通网页和应用优先通过 Windows UI Automation 直接读取选区。PDF 为避免取词位置偏移，以及其它应用读不到选区时，
+              会按“剪贴板兜底”设置模拟 <kbd>Ctrl</kbd> + <kbd>C</kbd> 取词，随后还原剪贴板。
+              关闭兜底后，PDF 不显示划词图标。
               在资源管理器里禁用这条兜底路径，免得选中若干文件时被误触发成「复制文件」。
             </p>
             <p>

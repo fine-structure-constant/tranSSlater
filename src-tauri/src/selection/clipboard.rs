@@ -1,6 +1,6 @@
 //! 剪贴板兜底。
 //!
-//! 只在 UI Automation 读不到选区时才走这里，因为它要模拟 `Ctrl+C`，副作用比只读的
+//! UI Automation 读不到选区、或 PDF 提供者的字符偏移不可靠时走这里。它要模拟 `Ctrl+C`，副作用比只读的
 //! UI Automation 大得多。流程是「快照 → 清空 → Ctrl+C → 轮询读回 → 还原」。
 //!
 //! 两个关键设计：
@@ -13,7 +13,7 @@
 
 use std::time::{Duration, Instant};
 
-use windows::Win32::Foundation::{GlobalFree, HANDLE, HGLOBAL};
+use windows::Win32::Foundation::{GlobalFree, HANDLE, HGLOBAL, HWND};
 use windows::Win32::System::DataExchange::{
     CloseClipboard, EmptyClipboard, EnumClipboardFormats, GetClipboardData, OpenClipboard,
     SetClipboardData,
@@ -26,6 +26,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS,
     KEYEVENTF_KEYUP, SendInput, VIRTUAL_KEY, VK_C, VK_CONTROL,
 };
+use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
 
 /// 等待目标程序把选区写进剪贴板的最长时间。
 const COPY_TIMEOUT: Duration = Duration::from_millis(500);
@@ -63,7 +64,10 @@ struct Snapshot(Vec<(u32, Vec<u8>)>);
 /// 用 Ctrl+C 取当前选中的文字，并把剪贴板还原回去。
 ///
 /// 取不到（没有选区、目标程序不响应复制、前台是提权窗口被 UIPI 拦下）时返回 `None`。
-pub fn read_selection_via_copy() -> Option<String> {
+pub fn read_selection_via_copy(source_window: HWND) -> Option<String> {
+    if source_window.is_invalid() || unsafe { GetForegroundWindow() } != source_window {
+        return None;
+    }
     let saved = unsafe {
         if OpenClipboard(None).is_err() {
             return None;
@@ -76,7 +80,7 @@ pub fn read_selection_via_copy() -> Option<String> {
     };
 
     let mut text = None;
-    if send_ctrl_c() {
+    if unsafe { GetForegroundWindow() } == source_window && send_ctrl_c() {
         text = poll_text();
     }
 
@@ -87,7 +91,7 @@ pub fn read_selection_via_copy() -> Option<String> {
         }
     }
 
-    text
+    if unsafe { GetForegroundWindow() } == source_window { text } else { None }
 }
 
 /// 调用方必须已经打开剪贴板。

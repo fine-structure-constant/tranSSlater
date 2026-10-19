@@ -22,7 +22,7 @@ export interface Settings {
   rememberWindow: boolean;
   /** 划词翻译总开关：划选文字后弹出悬浮图标 */
   selectTranslate: boolean;
-  /** UI Automation 读不到选区时，是否退到「模拟 Ctrl+C 读剪贴板」 */
+  /** UI Automation 读不到或 PDF 选区不可靠时，是否允许模拟 Ctrl+C 取词 */
   clipboardFallback: boolean;
   /** 是否在资源管理器右键菜单里注册「翻译（tranSSlater）」 */
   shellMenu: boolean;
