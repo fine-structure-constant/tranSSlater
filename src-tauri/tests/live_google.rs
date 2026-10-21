@@ -16,6 +16,25 @@ fn hub() -> EngineHub {
     EngineHub::new(None).expect("构建引擎表失败")
 }
 
+#[tokio::test]
+#[ignore = "需要联网访问有道词典"]
+async fn live_youdao_spelling_suggestions() {
+    use transslater_lib::translate::routing;
+    let engines = hub();
+    for selected in ["youdao", "youdaoTrans"] {
+        assert_eq!(routing::resolve("translateor", "auto", "zh-CN", selected).engine, "youdao");
+    }
+    let r = engines.get("youdao").unwrap().translate("translateor", "auto", "zh-CN").await.unwrap();
+    assert!(r.is_suggestion_only());
+    assert!(r.suggestions.iter().any(|s| s.word == "translator"));
+    assert!(r.suggestions.iter().any(|s| s.word == "translation"));
+    println!("translateor -> {:?}", r.suggestions.iter().map(|s| &s.word).collect::<Vec<_>>());
+    let corrected = engines.get("youdao").unwrap().translate("translator", "auto", "zh-CN").await.unwrap();
+    assert!(!corrected.translation.is_empty());
+    assert!(!corrected.is_suggestion_only());
+    println!("Selected translator returns a dictionary result");
+}
+
 fn dump(r: &transslater_lib::translate::TranslateResult) {
     println!("引擎      : {}", r.engine);
     println!("译文      : {}", r.translation);

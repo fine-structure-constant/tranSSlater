@@ -1,0 +1,15 @@
+{
+  "input": "translateor",
+  "typos": {
+    "typo": [
+      { "word": "translator", "trans": "n. 译者；翻译器" },
+      { "word": "translation", "trans": "n. 翻译；译文；转化；调任" }
+    ]
+  },
+  "meta": {
+    "input": "translateor", "guessLanguage": "eng", "isHasSimpleDict": "0",
+    "le": "en", "lang": "eng", "dicts": ["typos", "meta"]
+  },
+  "le": "en",
+  "lang": "eng"
+}

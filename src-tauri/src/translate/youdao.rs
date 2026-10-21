@@ -10,7 +10,7 @@
 //! - `oxford*` / `webster` / `wordElaboration` 返回 `encryptedData`，需要
 //!   逆向 JS 才能解，**本驱动不取**
 //!
-//! 整句查询时 jsonapi 不返回任何词典数据，此时自动回落到「有道翻译」接口取译文。
+//! 拼写错误读取 typos 候选；既无词典数据也无候选时才回落到「有道翻译」。
 
 use std::time::{Duration, Instant};
 
@@ -28,7 +28,7 @@ const ENDPOINT: &str = "https://dict.youdao.com/jsonapi";
 const REFERER: &str = "https://dict.youdao.com/";
 
 /// 只请求这些板块。`count` 必须不小于列表长度，否则后面的会被丢掉。
-const DICTS: &str = r#"{"count":15,"dicts":[["ec"],["ce"],["jec"],["fec"],["kec"],["phrs"],["syno"],["ee"],["special"],["web_trans"],["blng_sents_part"],["auth_sents_part"],["collins_primary"],["rel_word"],["etym"],["discriminate"],["aiDefinition"],["expand_ec"]]}"#;
+const DICTS: &str = r#"{"count":19,"dicts":[["ec"],["ce"],["jec"],["fec"],["kec"],["phrs"],["syno"],["ee"],["special"],["web_trans"],["blng_sents_part"],["auth_sents_part"],["collins_primary"],["rel_word"],["etym"],["discriminate"],["aiDefinition"],["expand_ec"],["typos"]]}"#;
 
 /// 一次查询最多取多少条例句。
 const MAX_EXAMPLES: usize = 15;
@@ -183,7 +183,7 @@ fn voice_url(word: &str, uk: bool) -> Option<String> {
 
 /// 把 jsonapi 响应映射成 [`TranslateResult`]。
 ///
-/// 返回 `None` 表示这次查询没有任何词典数据（通常是整句），
+/// 返回 `None` 表示这次查询既无词典数据，也无拼写候选（通常是整句），
 /// 调用方应回落到翻译接口。
 pub fn parse(raw: &Value, query: &str, target_lang: &str) -> Option<TranslateResult> {
     let (dictionary, exams) = parse_bilingual(raw);
@@ -198,6 +198,7 @@ pub fn parse(raw: &Value, query: &str, target_lang: &str) -> Option<TranslateRes
     let phrases = parse_phrases(raw);
     let related = parse_related(raw);
     let sections = parse_sections(raw);
+    let suggestions = parse_suggestions(raw, query);
 
     let has_any = !dictionary.is_empty()
         || !synonyms.is_empty()
@@ -206,7 +207,7 @@ pub fn parse(raw: &Value, query: &str, target_lang: &str) -> Option<TranslateRes
         || !phrases.is_empty()
         || !related.is_empty()
         || !sections.is_empty();
-    if !has_any {
+    if !has_any && suggestions.is_empty() {
         return None;
     }
 
@@ -230,10 +231,11 @@ pub fn parse(raw: &Value, query: &str, target_lang: &str) -> Option<TranslateRes
         .map(normalize_lang)
         .unwrap_or_else(|| "auto".into());
 
-    let segments = vec![Segment {
-        text: translation.clone(),
-        source: query.to_string(),
-    }];
+    let segments = if translation.is_empty() {
+        Vec::new()
+    } else {
+        vec![Segment { text: translation.clone(), source: query.to_string() }]
+    };
 
     Some(TranslateResult {
         query: query.to_string(),
@@ -245,20 +247,39 @@ pub fn parse(raw: &Value, query: &str, target_lang: &str) -> Option<TranslateRes
         romanization: None,
         phonetic,
         phonetic_uk,
-        speak_url: voice_url(query, false),
+        speak_url: if has_any { voice_url(query, false) } else { None },
         target_speak_url: None,
         dictionary,
         alternatives: Vec::new(),
+        suggestions,
         synonyms,
         definitions,
         examples,
         phrases,
         related,
         sections,
-        is_word: true,
+        is_word: has_any,
         cached: false,
         elapsed_ms: 0,
     })
+}
+
+fn parse_suggestions(raw: &Value, query: &str) -> Vec<QuerySuggestion> {
+    let mut out: Vec<QuerySuggestion> = Vec::new();
+    for typo in pa(raw, "/typos/typo") {
+        let Some(word) = s_of(typo.get("word")) else { continue };
+        if word.eq_ignore_ascii_case(query.trim())
+            || out.iter().any(|s| s.word.eq_ignore_ascii_case(&word))
+        {
+            continue;
+        }
+        out.push(QuerySuggestion {
+            word,
+            translation: s_of(typo.get("trans")),
+        });
+        if out.len() >= MAX_PER_GROUP { break; }
+    }
+    out
 }
 
 fn normalize_lang(code: &str) -> String {
@@ -871,7 +892,7 @@ impl Driver for YoudaoDictDriver {
             return Ok(result);
         }
 
-        // 整句：jsonapi 不返回词典数据，改用翻译接口。
+        // 整句等既无词典数据、也无拼写候选的查询才使用翻译兜底。
         let body = self.client.fallback.raw(text, from, to).await?;
         let mut result = YoudaoTransClient::extract(&body, text, to);
         result.elapsed_ms = started.elapsed().as_millis() as u64;
@@ -883,6 +904,64 @@ impl Driver for YoudaoDictDriver {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn requests_spelling_suggestions_with_a_complete_section_count() {
+        let requested: Value = serde_json::from_str(DICTS).unwrap();
+        let sections = requested["dicts"].as_array().unwrap();
+        assert_eq!(requested["count"].as_u64().unwrap() as usize, sections.len());
+        assert!(sections.iter().any(|s| s == &json!(["typos"])));
+    }
+
+    #[test]
+    fn real_misspelling_response_returns_choices_instead_of_translation_fallback() {
+        let raw: Value = serde_json::from_str(include_str!("../../tests/fixtures/youdao-translateor.json")).unwrap();
+        let r = parse(&raw, "translateor", "zh-CN").unwrap();
+        assert_eq!(r.query, "translateor");
+        assert_eq!(r.source_lang, "en");
+        assert_eq!(r.engine, ID);
+        assert_eq!(r.suggestions.iter().map(|s| s.word.as_str()).collect::<Vec<_>>(), ["translator", "translation"]);
+        assert_eq!(r.suggestions[0].translation.as_deref(), Some("n. 译者；翻译器"));
+        assert!(r.is_suggestion_only());
+        assert!(r.translation.is_empty());
+        assert!(r.segments.is_empty());
+        assert!(!r.is_word);
+        assert!(r.speak_url.is_none());
+    }
+
+    #[test]
+    fn suggestion_parsing_skips_invalid_duplicate_and_self_candidates() {
+        let raw = json!({"typos":{"typo":[{}, {"word":null}, {"word":" "}, {"word":"translateor"},
+            {"word":" translator ","trans":" n. 译者 "}, {"word":"TRANSLATOR"}, {"word":"translation","trans":" "}]}});
+        let r = parse(&raw, "translateor", "zh-CN").unwrap();
+        assert_eq!(r.suggestions.len(), 2);
+        assert_eq!(r.suggestions[0].word, "translator");
+        assert_eq!(r.suggestions[0].translation.as_deref(), Some("n. 译者"));
+        assert!(r.suggestions[1].translation.is_none());
+        assert!(parse(&json!({"typos":{"typo":"not an array"}}), "unknown", "zh-CN").is_none());
+    }
+
+    #[test]
+    fn suggestions_never_replace_a_valid_dictionary_result() {
+        let mut raw = word_response();
+        raw["typos"] = json!({"typo":[{"word":"coercive"}]});
+        let r = parse(&raw, "coercion", "zh-CN").unwrap();
+        assert!(!r.translation.is_empty());
+        assert!(!r.dictionary.is_empty());
+        assert!(!r.is_suggestion_only());
+        assert!(r.is_word);
+        assert_eq!(r.suggestions[0].word, "coercive");
+    }
+
+    #[test]
+    fn historical_results_without_suggestions_still_deserialize() {
+        let r = parse(&word_response(), "coercion", "zh-CN").unwrap();
+        let mut value = serde_json::to_value(&r).unwrap();
+        value.as_object_mut().unwrap().remove("suggestions");
+        let legacy: TranslateResult = serde_json::from_value(value).unwrap();
+        assert!(legacy.suggestions.is_empty());
+        assert_eq!(legacy.translation, r.translation);
+    }
 
     fn word_response() -> Value {
         json!({

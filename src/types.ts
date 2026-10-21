@@ -26,6 +26,8 @@ export interface TranslateResult {
   dictionary: DictEntry[];
   /** 中文近义候选 */
   alternatives: string[];
+  /** 拼写纠正 / 模糊查词候选，不是原查询的译文 */
+  suggestions: QuerySuggestion[];
   synonyms: SynonymGroup[];
   definitions: DefinitionGroup[];
   examples: Example[];
@@ -38,6 +40,11 @@ export interface TranslateResult {
   isWord: boolean;
   cached: boolean;
   elapsedMs: number;
+}
+
+export interface QuerySuggestion {
+  word: string;
+  translation: string | null;
 }
 
 export interface Segment {

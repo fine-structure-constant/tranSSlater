@@ -206,6 +206,7 @@ impl YoudaoTransClient {
                 .map(str::to_string),
             dictionary: Vec::new(),
             alternatives: Vec::new(),
+            suggestions: Vec::new(),
             synonyms: Vec::new(),
             definitions: Vec::new(),
             examples: Vec::new(),

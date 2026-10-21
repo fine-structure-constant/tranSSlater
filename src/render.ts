@@ -121,6 +121,31 @@ export function renderResult(
   if (r.cached) head.appendChild(el("span", "label", "缓存命中"));
   root.appendChild(head);
 
+  const suggestions = r.suggestions ?? [];
+  if (suggestions.length > 0) {
+    const block = el("section", "query-suggestions");
+    block.setAttribute("aria-label", "拼写建议");
+    const title = el("p", "suggestion-title");
+    title.textContent = r.translation.trim()
+      ? "你可能想查："
+      : `未找到“${r.query}”的词典释义，你可能想查：`;
+    block.appendChild(title);
+    const options = el("div", "suggestion-options");
+    for (const suggestion of suggestions) {
+      const button = el("button", "suggestion-option");
+      button.type = "button";
+      button.title = `查询「${suggestion.word}」`;
+      button.appendChild(el("span", "suggestion-word", esc(suggestion.word)));
+      if (suggestion.translation) {
+        button.appendChild(el("span", "suggestion-gloss", esc(suggestion.translation)));
+      }
+      button.addEventListener("click", () => onQuery(suggestion.word));
+      options.appendChild(button);
+    }
+    block.appendChild(options);
+    root.appendChild(block);
+  }
+
   if (r.segments.length > 1) {
     // 多段：保留原文/译文对照
     const box = el("div", "segments");
@@ -131,7 +156,7 @@ export function renderResult(
       box.appendChild(item);
     }
     root.appendChild(box);
-  } else {
+  } else if (r.translation.trim()) {
     root.appendChild(
       el("div", r.isWord ? "main-trans" : "main-trans sentence", esc(r.translation)),
     );

@@ -156,8 +156,8 @@ async fn translate(
 
     let result = driver.translate(&text, route.from, route.to).await?;
 
-    // 只有真正发过请求（未命中缓存）才记历史，避免同一会话里刷出重复条目。
-    if runtime.record_history {
+    // 未命中缓存且有实际结果才记历史，拼写候选不算成功翻译。
+    if runtime.record_history && !result.is_suggestion_only() {
         if let Ok(store) = state.history.lock() {
             if let Err(err) = store.add(&result, history::now_ms()) {
                 eprintln!("写入历史失败：{err}");

@@ -277,6 +277,7 @@ pub fn parse(
         target_speak_url: None,
         dictionary,
         alternatives,
+        suggestions: Vec::new(),
         synonyms,
         definitions,
         examples,

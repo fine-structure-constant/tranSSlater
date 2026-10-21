@@ -184,6 +184,17 @@ try {
       if (cmd === "translate") {
         await new Promise(resolve => setTimeout(resolve, args.text === "slow" ? 350 : 20));
         if (args.text === "network-failure") throw "connect error";
+        if (args.text === "translateor") return {
+          query: args.text, sourceLang: "en", targetLang: "zh-CN", engine: args.engine,
+          translation: "", segments: [], romanization: null, phonetic: null, phoneticUk: null,
+          speakUrl: null, targetSpeakUrl: null, dictionary: [], alternatives: [], synonyms: [],
+          definitions: [], examples: [], phrases: [], related: [], sections: [],
+          suggestions: window.spellingSuggestions ?? [
+            { word: "translator", translation: "n. 译者；翻译器" },
+            { word: "translation", translation: "n. 翻译；译文；转化；调任" },
+          ],
+          isWord: false, cached: false, elapsedMs: 20,
+        };
         const cached = cache.has(args.text);
         cache.add(args.text);
         return {
@@ -284,6 +295,46 @@ try {
   const lastTranslate = await page.evaluate(() => window.calls.filter(c => c.cmd === "translate").pop());
   check(lastTranslate.args.engine === "youdao", "switching engine passes the new engine to the backend");
   check(await page.evaluate(() => window.fakeSettings.engine === "youdao"), "engine choice is persisted");
+
+  // ── 模糊查词：保留原输入，让用户明确选择，再查询完整词条 ──────
+  await page.locator("#input").fill("translateor");
+  await page.locator("#input").press("Control+Enter");
+  await page.waitForFunction(() => document.querySelectorAll(".suggestion-option").length === 2);
+  check(await page.locator("#input").inputValue() === "translateor", "spelling suggestions preserve the original query");
+  check((await page.locator(".query-suggestions").innerText()).includes("你可能想查"), "misspelled query presents choices instead of an empty translation");
+  check((await page.locator(".suggestion-option").allInnerTexts()).every(text => text.includes("n.")), "suggestions include their dictionary glosses");
+  check(await page.locator(".main-trans").count() === 0 && await page.locator("#alert").isHidden(), "suggestion-only results show neither a fake translation nor an error");
+  await page.screenshot({ path: "test-results/spelling-plain.png" });
+  await page.locator(".suggestion-option").first().focus();
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => document.querySelector(".main-trans")?.textContent === "译文：translator");
+  check(await page.locator("#input").inputValue() === "translator", "keyboard selection queries the chosen corrected word");
+  check(await page.locator(".query-suggestions").count() === 0, "corrected results remove stale spelling choices");
+  const correctedCall = await page.evaluate(() => window.calls.filter(c => c.cmd === "translate").pop());
+  check(correctedCall.args.text === "translator" && correctedCall.args.engine === "youdao", "candidate lookup retains the selected dictionary engine");
+  await page.locator("#input").fill("translateor");
+  await page.locator("#input").press("Control+Enter");
+  await page.waitForFunction(() => document.querySelectorAll(".suggestion-option").length === 2);
+  await page.evaluate(() => document.documentElement.dataset.theme = "meridian");
+  await page.setViewportSize({ width: 720, height: 480 });
+  await page.screenshot({ path: "test-results/spelling-meridian.png" });
+  check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "suggestions fit the compact window in the second theme");
+  await page.locator(".suggestion-option").nth(1).click();
+  await page.waitForFunction(() => document.querySelector(".main-trans")?.textContent === "译文：translation");
+  check(await page.locator("#input").inputValue() === "translation", "clicking the second suggestion queries that word");
+  await page.evaluate(() => {
+    document.documentElement.dataset.theme = "plain";
+    window.spellingSuggestions = [{ word: '<img src=x onerror="window.injected=true">', translation: '<script>window.injected=true</script>' }];
+  });
+  await page.setViewportSize({ width: 1020, height: 730 });
+  await page.locator("#input").fill("translateor");
+  await page.locator("#input").press("Control+Enter");
+  await page.waitForFunction(() => document.querySelectorAll(".suggestion-option").length === 1);
+  check(await page.locator(".query-suggestions img, .query-suggestions script").count() === 0, "upstream suggestion words and glosses are escaped");
+  await page.evaluate(() => delete window.spellingSuggestions);
+  await page.locator("#input").fill("hello");
+  await page.locator("#input").press("Control+Enter");
+  await page.waitForFunction(() => document.querySelector(".main-trans")?.textContent === "译文：hello");
 
   // ── 历史抽屉 ──────────────────────────────────────────────
   await page.locator("#btn-history").click();

@@ -39,6 +39,9 @@ pub struct TranslateResult {
     pub dictionary: Vec<DictEntry>,
     /// 中文近义候选（Google dt=at），如 ["强迫","胁迫","强制"]
     pub alternatives: Vec<String>,
+    /// 拼写纠正 / 模糊查词候选；与译文的其他译法分开。
+    #[serde(default)]
+    pub suggestions: Vec<QuerySuggestion>,
     /// 同近义词，按词性分组（Google dt=ss / 有道 syno）
     pub synonyms: Vec<SynonymGroup>,
     /// 英英释义，按词性分组（Google dt=md / 有道 ee）
@@ -64,6 +67,13 @@ pub struct TranslateResult {
 }
 
 impl TranslateResult {
+    /// 只有待选词，没有实际查词结果；不应作为成功翻译写入学习历史。
+    pub fn is_suggestion_only(&self) -> bool {
+        !self.suggestions.is_empty()
+            && self.translation.trim().is_empty()
+            && !self.has_lexical_data()
+    }
+
     /// 是否包含词典类数据
     pub fn has_lexical_data(&self) -> bool {
         !self.dictionary.is_empty()
@@ -74,6 +84,14 @@ impl TranslateResult {
             || !self.related.is_empty()
             || !self.sections.is_empty()
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuerySuggestion {
+    pub word: String,
+    #[serde(default)]
+    pub translation: Option<String>,
 }
 
 /// 一段译文及其对应的原文片段。

@@ -571,6 +571,51 @@ select {
 }
 
 /* 主译文 */
+.query-suggestions {
+  margin-bottom: 18px;
+}
+
+.suggestion-title {
+  margin: 0 0 12px;
+  color: var(--text-2);
+  font-size: calc(14px * var(--fs));
+  overflow-wrap: anywhere;
+}
+
+.suggestion-options {
+  display: grid;
+  gap: 8px;
+}
+
+.suggestion-option {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.suggestion-option:hover {
+  border-color: var(--accent);
+}
+
+.suggestion-word {
+  font-family: var(--font-en);
+  font-size: calc(17px * var(--fs));
+  font-weight: 600;
+}
+
+.suggestion-gloss {
+  color: var(--text-2);
+  font-size: calc(13px * var(--fs));
+}
+
 .main-trans {
   font-size: calc(23px * var(--fs));
   line-height: 1.65;
