@@ -6,6 +6,8 @@ mod history;
 mod selection;
 mod settings;
 #[cfg(windows)]
+mod taskbar;
+#[cfg(windows)]
 mod shell_menu;
 pub mod translate;
 
@@ -442,6 +444,12 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let handle = app.handle().clone();
+            #[cfg(windows)]
+            if let Some(main) = handle.get_webview_window("main") {
+                if let Err(err) = taskbar::configure(&main) {
+                    eprintln!("任务栏初始化失败：{err}");
+                }
+            }
             let (state, loaded) = AppState::new(&handle)?;
 
             // 冷启动带 --translate-file：前端还没加载，事件会丢，先存下来等它来取

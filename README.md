@@ -6,6 +6,8 @@ Windows 桌面应用，使用 Tauri 2、Rust 与 TypeScript。两个可切换的
 
 双击 `artifacts/tranSSlater.exe`。这个文件包含界面资源，不需要启动 Vite、Node.js 或 Rust。
 
+固定到任务栏：运行 EXE 后，右键任务栏中的应用图标，选择「固定到任务栏」。关闭后可通过固定图标重新启动；已经运行时点击会恢复现有窗口。便携版固定后请保留 EXE 的路径；移动文件后需要重新固定。
+
 当前优化版使用 `artifacts/tranSSlater.exe`；此前的满窗狂欢版保留在 `artifacts/Translater-party.exe` 供比较。两者共用已有设置与历史。构建脚本可通过 `-ArtifactName` 指定输出文件名。
 
 运行环境需要 Microsoft Edge WebView2 Runtime（Windows 10/11 通常已安装）。
