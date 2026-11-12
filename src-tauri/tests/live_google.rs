@@ -17,6 +17,27 @@ fn hub() -> EngineHub {
 }
 
 #[tokio::test]
+#[ignore = "需要联网访问有道词典及翻译"]
+async fn live_youdao_chinese_phrase_and_example_only_fallback() {
+    let engines = hub();
+    for (query, expected_engine) in [("前天", "youdao"), ("上上学期", "youdaoTrans")] {
+        let route = transslater_lib::translate::routing::resolve(query, "auto", "zh-CN", "youdao");
+        let result = engines.get(route.engine).unwrap()
+            .translate(query, route.from, route.to).await.unwrap();
+        assert_eq!(result.engine, expected_engine);
+        assert!(!result.translation.trim().is_empty());
+        if query == "前天" {
+            assert_eq!(result.translation, "the day before yesterday");
+            assert!(result.dictionary.iter().any(|d| d.terms.contains(&result.translation)));
+        } else {
+            assert!(result.dictionary.is_empty());
+            assert!(result.examples.is_empty());
+        }
+        println!("{query} -> {} ({})", result.translation, result.engine);
+    }
+}
+
+#[tokio::test]
 #[ignore = "需要联网访问有道词典"]
 async fn live_youdao_spelling_suggestions() {
     use transslater_lib::translate::routing;

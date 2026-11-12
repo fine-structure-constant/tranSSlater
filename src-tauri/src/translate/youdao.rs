@@ -135,6 +135,21 @@ fn collect_i(v: Option<&Value>) -> Vec<String> {
     }
 }
 
+/// CE 的短语可由链接词和独立的空格节点组成。保留这些显式分隔符，
+/// 同时兼容没有分隔节点、每项都是独立译义的数组。
+fn collect_ce_i(v: Option<&Value>) -> Vec<String> {
+    let items = arr(v);
+    if items.iter().any(|item| {
+        item.as_str().is_some_and(|s| !s.is_empty() && s.chars().all(char::is_whitespace))
+    }) {
+        let phrase: String = items.iter().filter_map(|item| {
+            item.as_str().or_else(|| item.get("#text").and_then(Value::as_str))
+        }).collect();
+        return vec![phrase];
+    }
+    collect_i(v)
+}
+
 /// 把 `"n. 强迫，胁迫；高压政治"` 拆成 `("n.", "强迫，胁迫；高压政治")`。
 ///
 /// 没有词性前缀时返回空词性，避免把 `"the act of ..."` 的首词误当词性。
@@ -183,7 +198,7 @@ fn voice_url(word: &str, uk: bool) -> Option<String> {
 
 /// 把 jsonapi 响应映射成 [`TranslateResult`]。
 ///
-/// 返回 `None` 表示这次查询既无词典数据，也无拼写候选（通常是整句），
+/// 返回 `None` 表示这次查询既无双语词条，也无拼写候选，
 /// 调用方应回落到翻译接口。
 pub fn parse(raw: &Value, query: &str, target_lang: &str) -> Option<TranslateResult> {
     let (dictionary, exams) = parse_bilingual(raw);
@@ -192,22 +207,9 @@ pub fn parse(raw: &Value, query: &str, target_lang: &str) -> Option<TranslateRes
         entry.exams = exams.clone();
     }
 
-    let synonyms = parse_synonyms(raw);
-    let definitions = parse_definitions(raw);
-    let examples = parse_examples(raw);
-    let phrases = parse_phrases(raw);
-    let related = parse_related(raw);
-    let sections = parse_sections(raw);
     let suggestions = parse_suggestions(raw, query);
-
-    let has_any = !dictionary.is_empty()
-        || !synonyms.is_empty()
-        || !definitions.is_empty()
-        || !examples.is_empty()
-        || !phrases.is_empty()
-        || !related.is_empty()
-        || !sections.is_empty();
-    if !has_any && suggestions.is_empty() {
+    let has_entry = !dictionary.is_empty();
+    if !has_entry && suggestions.is_empty() {
         return None;
     }
 
@@ -247,18 +249,18 @@ pub fn parse(raw: &Value, query: &str, target_lang: &str) -> Option<TranslateRes
         romanization: None,
         phonetic,
         phonetic_uk,
-        speak_url: if has_any { voice_url(query, false) } else { None },
+        speak_url: if has_entry { voice_url(query, false) } else { None },
         target_speak_url: None,
         dictionary,
         alternatives: Vec::new(),
         suggestions,
-        synonyms,
-        definitions,
-        examples,
-        phrases,
-        related,
-        sections,
-        is_word: has_any,
+        synonyms: if has_entry { parse_synonyms(raw) } else { Vec::new() },
+        definitions: if has_entry { parse_definitions(raw) } else { Vec::new() },
+        examples: if has_entry { parse_examples(raw) } else { Vec::new() },
+        phrases: if has_entry { parse_phrases(raw) } else { Vec::new() },
+        related: if has_entry { parse_related(raw) } else { Vec::new() },
+        sections: if has_entry { parse_sections(raw) } else { Vec::new() },
+        is_word: has_entry,
         cached: false,
         elapsed_ms: 0,
     })
@@ -321,7 +323,11 @@ fn parse_bilingual(root: &Value) -> (Vec<DictEntry>, Vec<String>) {
                         .unwrap_or("")
                         .trim()
                         .to_string();
-                    let items = collect_i(l.get("i"));
+                    let items = if key == "ce" {
+                        collect_ce_i(l.get("i"))
+                    } else {
+                        collect_i(l.get("i"))
+                    };
 
                     if pos_field.is_empty() {
                         // ec 风格：每行自带 "n. " 前缀
@@ -892,7 +898,7 @@ impl Driver for YoudaoDictDriver {
             return Ok(result);
         }
 
-        // 整句等既无词典数据、也无拼写候选的查询才使用翻译兜底。
+        // 例句等补充内容不能代替正式词条；没有词条或拼写候选时使用翻译兜底。
         let body = self.client.fallback.raw(text, from, to).await?;
         let mut result = YoudaoTransClient::extract(&body, text, to);
         result.elapsed_ms = started.elapsed().as_millis() as u64;
@@ -1101,6 +1107,28 @@ mod tests {
         assert_eq!(r.dictionary[0].pos, "vt.");
         assert_eq!(r.dictionary[0].terms, vec!["compel", "force"]);
         assert_eq!(r.translation, "compel");
+    }
+
+    #[test]
+    fn chinese_phrase_preserves_spaces_between_linked_words() {
+        let raw = json!({"ce":{"word":[{"trs":[{"tr":[{"l":{"i":[
+            "", {"#text":"the","@action":"link"}, " ", {"#text":"day","@action":"link"},
+            " ", {"#text":"before","@action":"link"}, " ", {"#text":"yesterday","@action":"link"}
+        ]}}]}]}]}});
+        let r = parse(&raw, "前天", "en").unwrap();
+        assert_eq!(r.translation, "the day before yesterday");
+        assert_eq!(r.dictionary[0].terms, ["the day before yesterday"]);
+    }
+
+    #[test]
+    fn example_only_response_does_not_count_as_dictionary_hit() {
+        let raw = json!({"meta":{"guessLanguage":"zh","isHasSimpleDict":"0"},
+            "blng_sents_part":{"sentence-pair":[{
+                "sentence-eng":"That was covered last term.",
+                "sentence-translation":"那是<b>上学期</b>的内容。"
+            }]}}
+        );
+        assert!(parse(&raw, "上上学期", "en").is_none());
     }
 
     #[test]
